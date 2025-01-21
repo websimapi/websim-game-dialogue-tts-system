@@ -11,11 +11,56 @@ class GameDialogueTTS {
     this.ttsEngine = new TTSEngine();
     
     this.setupEventListeners();
+    this.populateVoiceSelects();
+    this.loadSavedSettings();
     this.isProcessing = false;
     this.lastDialogue = { name: null, text: '' };
     this.scanInterval = null;
     this.isPickingColor = false;
     this.setupNPCList();
+  }
+
+  populateVoiceSelects() {
+    const populateSelect = (select) => {
+      select.innerHTML = `
+        <option value="">Default Voice</option>
+        ${speechSynthesis.getVoices().map(voice => 
+          `<option value="${voice.name}">${voice.name} (${voice.lang})</option>`
+        ).join('')}
+      `;
+    };
+
+    const voiceSelects = document.querySelectorAll('.voice-select');
+    voiceSelects.forEach(select => populateSelect(select));
+
+    // Handle dynamic voice loading
+    speechSynthesis.onvoiceschanged = () => {
+      voiceSelects.forEach(select => populateSelect(select));
+      this.loadSavedSettings();
+    };
+  }
+
+  loadSavedSettings() {
+    // Load color picker settings
+    for (let i = 1; i <= 3; i++) {
+      const colorInput = document.getElementById(`color${i}`);
+      const toleranceInput = document.getElementById(`tolerance${i}`);
+      const enableInput = document.getElementById(`enable${i}`);
+      const voiceSelect = document.getElementById(`voice${i}`);
+
+      const savedColor = localStorage.getItem(`dialogueColor${i-1}`);
+      const savedTolerance = localStorage.getItem(`dialogueTolerance${i-1}`);
+      const savedEnabled = localStorage.getItem(`dialogueEnabled${i-1}`);
+      const savedVoice = localStorage.getItem(`dialogueVoice${i-1}`);
+
+      if (savedColor) colorInput.value = savedColor;
+      if (savedTolerance) {
+        toleranceInput.value = savedTolerance;
+        toleranceInput.nextElementSibling.textContent = savedTolerance;
+      }
+      if (savedEnabled !== null) enableInput.checked = savedEnabled === 'true';
+      if (savedVoice) voiceSelect.value = savedVoice;
+    }
   }
 
   setupEventListeners() {
@@ -24,6 +69,9 @@ class GameDialogueTTS {
     // Setup color picker events
     for (let i = 1; i <= 3; i++) {
       const colorInput = document.getElementById(`color${i}`);
+      const enableInput = document.getElementById(`enable${i}`);
+      const voiceSelect = document.getElementById(`voice${i}`);
+
       colorInput.addEventListener('input', (e) => {
         this.dialogueDetector.setColor(i-1, e.target.value);
       });
@@ -31,6 +79,14 @@ class GameDialogueTTS {
       document.getElementById(`tolerance${i}`).addEventListener('input', (e) => {
         this.dialogueDetector.setTolerance(i-1, parseInt(e.target.value));
         e.target.nextElementSibling.textContent = e.target.value;
+      });
+
+      enableInput.addEventListener('change', (e) => {
+        this.dialogueDetector.setEnabled(i-1, e.target.checked);
+      });
+
+      voiceSelect.addEventListener('change', (e) => {
+        localStorage.setItem(`dialogueVoice${i-1}`, e.target.value);
       });
     }
 
@@ -181,27 +237,35 @@ class GameDialogueTTS {
             this.lastDialogue = { name, text };
             dialoguePreview.style.backgroundImage = `url(${region.preview})`;
             
-            // Display NPC name if present
             ocrText.textContent = name ? `${name}: ${text}` : text;
             
-            // Add NPC to list if it's a new one
             if (name) {
               this.addNPCToList(name);
             }
 
-            // Get voice preference for this NPC
+            // Get voice preference for this NPC or dialogue box
+            let selectedVoice;
             if (name) {
               const voiceSelect = document.querySelector(`[data-npc="${name}"] .voice-select`);
-              if (voiceSelect) {
-                const selectedVoice = speechSynthesis.getVoices()
+              if (voiceSelect && voiceSelect.value) {
+                selectedVoice = speechSynthesis.getVoices()
                   .find(voice => voice.name === voiceSelect.value);
-                if (selectedVoice) {
-                  this.ttsEngine.setVoice(selectedVoice);
-                }
+              }
+            }
+            
+            // If no NPC voice, use dialogue box default voice
+            if (!selectedVoice && region.boxIndex !== undefined) {
+              const boxVoice = document.getElementById(`voice${region.boxIndex + 1}`).value;
+              if (boxVoice) {
+                selectedVoice = speechSynthesis.getVoices()
+                  .find(voice => voice.name === boxVoice);
               }
             }
 
-            // Only speak the dialogue text, not the name
+            if (selectedVoice) {
+              this.ttsEngine.setVoice(selectedVoice);
+            }
+
             await this.ttsEngine.speak(text);
           }
         }

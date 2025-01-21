@@ -42,15 +42,34 @@
 .color-picker {
   margin: 10px 0;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 10px;
   position: relative;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.color-picker-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.color-picker-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
 }
 
 .tolerance {
   display: flex;
   align-items: center;
   gap: 5px;
+}
+
+.enable-toggle {
+  margin-left: auto;
 }
 
 input[type="range"] {
@@ -144,4 +163,14 @@ button:hover {
   padding: 5px;
   border-radius: 3px;
   border: 1px solid #ddd;
+}
+
+.voice-settings {
+  margin-top: 10px;
+}
+
+.voice-settings select {
+  width: 100%;
+  padding: 5px;
+  margin-top: 5px;
 }

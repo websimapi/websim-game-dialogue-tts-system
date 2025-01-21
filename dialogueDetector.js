@@ -2,14 +2,43 @@ export class DialogueDetector {
   constructor() {
     this.colors = Array(3).fill('#ffffff');
     this.tolerances = Array(3).fill(10);
+    this.enabled = Array(3).fill(true);
+    this.loadSettings();
+  }
+
+  loadSettings() {
+    for (let i = 0; i < 3; i++) {
+      const savedColor = localStorage.getItem(`dialogueColor${i}`);
+      const savedTolerance = localStorage.getItem(`dialogueTolerance${i}`);
+      const savedEnabled = localStorage.getItem(`dialogueEnabled${i}`);
+      
+      if (savedColor) this.colors[i] = savedColor;
+      if (savedTolerance) this.tolerances[i] = parseInt(savedTolerance);
+      if (savedEnabled) this.enabled[i] = savedEnabled === 'true';
+    }
+  }
+
+  saveSettings() {
+    for (let i = 0; i < 3; i++) {
+      localStorage.setItem(`dialogueColor${i}`, this.colors[i]);
+      localStorage.setItem(`dialogueTolerance${i}`, this.tolerances[i]);
+      localStorage.setItem(`dialogueEnabled${i}`, this.enabled[i]);
+    }
   }
 
   setColor(index, color) {
     this.colors[index] = color;
+    this.saveSettings();
   }
 
   setTolerance(index, tolerance) {
     this.tolerances[index] = tolerance;
+    this.saveSettings();
+  }
+
+  setEnabled(index, enabled) {
+    this.enabled[index] = enabled;
+    this.saveSettings();
   }
 
   detectDialogueRegions(video, debugCanvas) {
@@ -22,7 +51,7 @@ export class DialogueDetector {
     const imageData = ctx.getImageData(0, 0, debugCanvas.width, debugCanvas.height);
     
     for (let i = 0; i < this.colors.length; i++) {
-      if (this.colors[i] === '#ffffff') continue;
+      if (!this.enabled[i] || this.colors[i] === '#ffffff') continue;
       
       const colorRegions = this.findColorRegions(
         imageData, 
@@ -30,7 +59,7 @@ export class DialogueDetector {
         this.tolerances[i]
       );
       
-      regions.push(...colorRegions);
+      regions.push(...colorRegions.map(region => ({...region, boxIndex: i})));
     }
 
     // Draw debug rectangles
