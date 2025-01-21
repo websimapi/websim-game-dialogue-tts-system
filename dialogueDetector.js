@@ -160,20 +160,28 @@ export class DialogueDetector {
       height: maxY - minY + 1
     };
     
+    // Create a new ImageData for the cropped region
+    const croppedData = new ImageData(region.width, region.height);
+    
+    // Copy pixel data from original to cropped
+    for (let y = 0; y < region.height; y++) {
+      for (let x = 0; x < region.width; x++) {
+        const sourceIndex = ((y + region.y) * width + (x + region.x)) * 4;
+        const targetIndex = (y * region.width + x) * 4;
+        
+        croppedData.data[targetIndex] = data[sourceIndex];
+        croppedData.data[targetIndex + 1] = data[sourceIndex + 1];
+        croppedData.data[targetIndex + 2] = data[sourceIndex + 2];
+        croppedData.data[targetIndex + 3] = data[sourceIndex + 3];
+      }
+    }
+    
     // Create preview image
     const canvas = document.createElement('canvas');
     canvas.width = region.width;
     canvas.height = region.height;
     const ctx = canvas.getContext('2d');
-    ctx.putImageData(
-      imageData, 
-      -region.x, 
-      -region.y, 
-      region.x, 
-      region.y, 
-      region.width, 
-      region.height
-    );
+    ctx.putImageData(croppedData, 0, 0);
     region.preview = canvas.toDataURL();
     
     return region;
