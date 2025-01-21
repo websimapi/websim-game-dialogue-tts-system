@@ -1,0 +1,70 @@
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game Dialogue TTS System</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="setup-panel">
+      <h2>Setup</h2>
+      <button id="startCapture">Start Screen Capture</button>
+      
+      <div class="color-pickers">
+        <h3>Select Dialogue Box Colors (up to 3)</h3>
+        <div class="color-picker">
+          <label>Color 1:</label>
+          <input type="color" id="color1" value="#ffffff">
+          <span class="tolerance">
+            Tolerance: <input type="range" min="0" max="50" value="10" id="tolerance1">
+            <span class="value">10</span>
+          </span>
+        </div>
+        <div class="color-picker">
+          <label>Color 2:</label>
+          <input type="color" id="color2" value="#ffffff">
+          <span class="tolerance">
+            Tolerance: <input type="range" min="0" max="50" value="10" id="tolerance2">
+            <span class="value">10</span>
+          </span>
+        </div>
+        <div class="color-picker">
+          <label>Color 3:</label>
+          <input type="color" id="color3" value="#ffffff">
+          <span class="tolerance">
+            Tolerance: <input type="range" min="0" max="50" value="10" id="tolerance3">
+            <span class="value">10</span>
+          </span>
+        </div>
+      </div>
+
+      <div class="scan-settings">
+        <h3>Scan Settings</h3>
+        <label>
+          Scan Interval (ms):
+          <input type="range" id="scanInterval" min="100" max="2000" value="500">
+          <span class="value">500</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="preview-panel">
+      <div class="video-container">
+        <video id="gameVideo" autoplay muted></video>
+        <canvas id="debugCanvas"></canvas>
+      </div>
+      
+      <div class="dialogue-preview">
+        <h3>Detected Dialogue</h3>
+        <div id="dialoguePreview"></div>
+        <div id="ocrText"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js"></script>
+  <script type="module" src="app.js"></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4c6229722a6346bc8eb5cb0e5eae5d41","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>
