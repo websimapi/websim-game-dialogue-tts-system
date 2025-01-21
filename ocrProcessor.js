@@ -13,6 +13,16 @@ export class OCRProcessor {
     }
   }
 
+  cleanText(text) {
+    // Convert to lowercase
+    text = text.toLowerCase();
+    // Remove special characters, keeping only alphanumeric, spaces, and basic punctuation
+    text = text.replace(/[^a-z0-9\s.,!?'-]/g, '');
+    // Clean up multiple spaces
+    text = text.replace(/\s+/g, ' ').trim();
+    return text;
+  }
+
   async processRegion(video, region) {
     await this.init();
 
@@ -35,7 +45,7 @@ export class OCRProcessor {
 
     try {
       const { data: { text } } = await this.worker.recognize(canvas);
-      return text.trim();
+      return this.cleanText(text);
     } catch (error) {
       console.error('OCR error:', error);
       return '';
