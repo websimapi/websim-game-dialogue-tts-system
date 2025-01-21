@@ -118,3 +118,30 @@ button:hover {
 .pick-button:hover {
   background: #777;
 }
+
+.npc-voices {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #ddd;
+}
+
+.npc-item {
+  margin: 10px 0;
+  padding: 10px;
+  background: white;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.npc-item span {
+  font-weight: bold;
+}
+
+.voice-select {
+  width: 100%;
+  padding: 5px;
+  border-radius: 3px;
+  border: 1px solid #ddd;
+}

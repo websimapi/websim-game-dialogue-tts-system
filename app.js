@@ -12,9 +12,10 @@ class GameDialogueTTS {
     
     this.setupEventListeners();
     this.isProcessing = false;
-    this.lastDialogue = '';
+    this.lastDialogue = { name: null, text: '' };
     this.scanInterval = null;
     this.isPickingColor = false;
+    this.setupNPCList();
   }
 
   setupEventListeners() {
@@ -54,6 +55,44 @@ class GameDialogueTTS {
       e.target.nextElementSibling.textContent = e.target.value;
       this.updateScanInterval(parseInt(e.target.value));
     });
+  }
+
+  setupNPCList() {
+    const npcNames = this.ocrProcessor.loadNPCNames();
+    const npcList = document.getElementById('npcList');
+    npcNames.forEach(name => {
+      this.addNPCToList(name);
+    });
+  }
+
+  addNPCToList(name) {
+    const npcList = document.getElementById('npcList');
+    if (!document.querySelector(`[data-npc="${name}"]`)) {
+      const div = document.createElement('div');
+      div.classList.add('npc-item');
+      div.dataset.npc = name;
+      div.innerHTML = `
+        <span>${name}</span>
+        <select class="voice-select">
+          <option value="">Default Voice</option>
+          ${speechSynthesis.getVoices().map(voice => 
+            `<option value="${voice.name}">${voice.name} (${voice.lang})</option>`
+          ).join('')}
+        </select>
+      `;
+      npcList.appendChild(div);
+
+      // Load saved voice preference
+      const savedVoice = localStorage.getItem(`npc-voice-${name}`);
+      if (savedVoice) {
+        div.querySelector('.voice-select').value = savedVoice;
+      }
+
+      // Save voice preference on change
+      div.querySelector('.voice-select').addEventListener('change', (e) => {
+        localStorage.setItem(`npc-voice-${name}`, e.target.value);
+      });
+    }
   }
 
   startColorPick(pickerIndex) {
@@ -136,18 +175,34 @@ class GameDialogueTTS {
         const ocrText = document.getElementById('ocrText');
         
         for (const region of regions) {
-          const { text, speakerName } = await this.ocrProcessor.processRegion(video, region);
+          const { name, text } = await this.ocrProcessor.processRegion(video, region);
           
-          if (text && text !== this.lastDialogue) {
-            this.lastDialogue = text;
+          if (text && (text !== this.lastDialogue.text || name !== this.lastDialogue.name)) {
+            this.lastDialogue = { name, text };
             dialoguePreview.style.backgroundImage = `url(${region.preview})`;
             
-            // Display speaker name if present
-            const displayText = speakerName ? `${speakerName}: ${text}` : text;
-            ocrText.textContent = displayText;
+            // Display NPC name if present
+            ocrText.textContent = name ? `${name}: ${text}` : text;
             
-            // Speak the text with the appropriate voice
-            await this.ttsEngine.speak(text, speakerName);
+            // Add NPC to list if it's a new one
+            if (name) {
+              this.addNPCToList(name);
+            }
+
+            // Get voice preference for this NPC
+            if (name) {
+              const voiceSelect = document.querySelector(`[data-npc="${name}"] .voice-select`);
+              if (voiceSelect) {
+                const selectedVoice = speechSynthesis.getVoices()
+                  .find(voice => voice.name === voiceSelect.value);
+                if (selectedVoice) {
+                  this.ttsEngine.setVoice(selectedVoice);
+                }
+              }
+            }
+
+            // Only speak the dialogue text, not the name
+            await this.ttsEngine.speak(text);
           }
         }
       }

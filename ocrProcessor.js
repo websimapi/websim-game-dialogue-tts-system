@@ -2,6 +2,47 @@ export class OCRProcessor {
   constructor() {
     this.worker = Tesseract.createWorker();
     this.initialized = false;
+    this.npcNames = new Set(this.loadNPCNames());
+  }
+
+  loadNPCNames() {
+    const savedNames = localStorage.getItem('npcNames');
+    return savedNames ? JSON.parse(savedNames) : [];
+  }
+
+  saveNPCNames() {
+    localStorage.setItem('npcNames', JSON.stringify(Array.from(this.npcNames)));
+  }
+
+  extractNPCName(text) {
+    // Remove leading special characters and get the first word
+    const firstWord = text.replace(/^[^a-zA-Z0-9]*/, '').split(/[\s.:]/)[0];
+    
+    // Check if the word is fully capitalized (at least 2 characters)
+    if (firstWord && firstWord.length >= 2 && firstWord === firstWord.toUpperCase()) {
+      this.npcNames.add(firstWord);
+      this.saveNPCNames();
+      // Remove the NPC name and any following special characters
+      text = text.substring(text.indexOf(firstWord) + firstWord.length)
+        .replace(/^[^a-zA-Z0-9]*/, '');
+      return { name: firstWord, text };
+    }
+    
+    return { name: null, text };
+  }
+
+  cleanText(text) {
+    // Extract NPC name first if present
+    const { name, text: remainingText } = this.extractNPCName(text);
+    
+    // Clean the remaining text
+    let cleanedText = remainingText.toLowerCase();
+    // Remove special characters, keeping only alphanumeric, spaces, and basic punctuation
+    cleanedText = cleanedText.replace(/[^a-z0-9\s.,!?'-]/g, '');
+    // Clean up multiple spaces
+    cleanedText = cleanedText.replace(/\s+/g, ' ').trim();
+    
+    return { name, text: cleanedText };
   }
 
   async init() {
@@ -11,37 +52,6 @@ export class OCRProcessor {
       await this.worker.initialize('eng');
       this.initialized = true;
     }
-  }
-
-  cleanText(text) {
-    // Split into words
-    let words = text.split(/\s+/);
-    
-    // Check for speaker name (first word if all caps)
-    let speakerName = null;
-    if (words.length > 0 && words[0].match(/^[A-Z]+$/)) {
-      speakerName = words[0];
-      words = words.slice(1); // Remove speaker name
-    }
-    
-    // Clean remaining text
-    let cleanedText = words
-      .map(word => {
-        // Convert to lowercase
-        word = word.toLowerCase();
-        // Remove special characters, keeping only alphanumeric and basic punctuation
-        word = word.replace(/[^a-z0-9.,!?'-]/g, '');
-        return word;
-      })
-      // Filter out single letters except 'a' and 'i'
-      .filter(word => word.length > 1 || word === 'a' || word === 'i')
-      .join(' ')
-      .trim();
-
-    return {
-      text: cleanedText,
-      speakerName: speakerName
-    };
   }
 
   async processRegion(video, region) {
@@ -69,7 +79,7 @@ export class OCRProcessor {
       return this.cleanText(text);
     } catch (error) {
       console.error('OCR error:', error);
-      return { text: '', speakerName: null };
+      return { name: null, text: '' };
     }
   }
 }
