@@ -14,31 +14,66 @@
       <div class="color-pickers">
         <h3>Select Dialogue Box Colors (up to 3)</h3>
         <div class="color-picker">
-          <label>Color 1:</label>
-          <input type="color" id="color1" value="#ffffff">
-          <button class="pick-button" data-picker="1">Pick from screen</button>
-          <span class="tolerance">
-            Tolerance: <input type="range" min="0" max="50" value="10" id="tolerance1">
-            <span class="value">10</span>
-          </span>
+          <div class="color-picker-header">
+            <label>Color 1:</label>
+            <input type="checkbox" class="enable-toggle" id="enable1" checked>
+          </div>
+          <div class="color-picker-controls">
+            <div>
+              <input type="color" id="color1" value="#ffffff">
+              <button class="pick-button" data-picker="1">Pick from screen</button>
+            </div>
+            <span class="tolerance">
+              Tolerance: <input type="range" min="0" max="50" value="10" id="tolerance1">
+              <span class="value">10</span>
+            </span>
+            <div class="voice-settings">
+              <label>Default Voice for Box 1:</label>
+              <select id="voice1" class="voice-select"></select>
+            </div>
+          </div>
         </div>
+        
         <div class="color-picker">
-          <label>Color 2:</label>
-          <input type="color" id="color2" value="#ffffff">
-          <button class="pick-button" data-picker="2">Pick from screen</button>
-          <span class="tolerance">
-            Tolerance: <input type="range" min="0" max="50" value="10" id="tolerance2">
-            <span class="value">10</span>
-          </span>
+          <div class="color-picker-header">
+            <label>Color 2:</label>
+            <input type="checkbox" class="enable-toggle" id="enable2" checked>
+          </div>
+          <div class="color-picker-controls">
+            <div>
+              <input type="color" id="color2" value="#ffffff">
+              <button class="pick-button" data-picker="2">Pick from screen</button>
+            </div>
+            <span class="tolerance">
+              Tolerance: <input type="range" min="0" max="50" value="10" id="tolerance2">
+              <span class="value">10</span>
+            </span>
+            <div class="voice-settings">
+              <label>Default Voice for Box 2:</label>
+              <select id="voice2" class="voice-select"></select>
+            </div>
+          </div>
         </div>
+        
         <div class="color-picker">
-          <label>Color 3:</label>
-          <input type="color" id="color3" value="#ffffff">
-          <button class="pick-button" data-picker="3">Pick from screen</button>
-          <span class="tolerance">
-            Tolerance: <input type="range" min="0" max="50" value="10" id="tolerance3">
-            <span class="value">10</span>
-          </span>
+          <div class="color-picker-header">
+            <label>Color 3:</label>
+            <input type="checkbox" class="enable-toggle" id="enable3" checked>
+          </div>
+          <div class="color-picker-controls">
+            <div>
+              <input type="color" id="color3" value="#ffffff">
+              <button class="pick-button" data-picker="3">Pick from screen</button>
+            </div>
+            <span class="tolerance">
+              Tolerance: <input type="range" min="0" max="50" value="10" id="tolerance3">
+              <span class="value">10</span>
+            </span>
+            <div class="voice-settings">
+              <label>Default Voice for Box 3:</label>
+              <select id="voice3" class="voice-select"></select>
+            </div>
+          </div>
         </div>
       </div>
 
