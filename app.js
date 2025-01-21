@@ -245,47 +245,48 @@ class GameDialogueTTS {
     const debugCanvas = document.getElementById('debugCanvas');
 
     try {
-      // Queue processing tasks
-      this.processingQueue = this.processingQueue
-        .then(async () => {
-          const regions = await this.dialogueDetector.detectDialogueRegions(video, debugCanvas);
+      const regions = await this.dialogueDetector.detectDialogueRegions(video, debugCanvas);
+      console.log('Detected regions:', regions);
+      
+      if (regions.length > 0) {
+        const dialoguePreview = document.getElementById('dialoguePreview');
+        const ocrText = document.getElementById('ocrText');
+        
+        // Process largest region only
+        const largestRegion = regions.reduce((max, region) => 
+          (region.width * region.height > max.width * max.height) ? region : max
+        );
+        
+        console.log('Processing largest region:', largestRegion);
+        const { name, text } = await this.ocrProcessor.processRegion(video, largestRegion);
+        console.log('Processed text:', { name, text });
+        
+        if (text && (text !== this.lastDialogue.text || name !== this.lastDialogue.name)) {
+          this.lastDialogue = { name, text };
           
-          if (regions.length > 0) {
-            const dialoguePreview = document.getElementById('dialoguePreview');
-            const ocrText = document.getElementById('ocrText');
-            
-            // Process largest region only
-            const largestRegion = regions.reduce((max, region) => 
-              (region.width * region.height > max.width * max.height) ? region : max
-            );
-            
-            const { name, text } = await this.ocrProcessor.processRegion(video, largestRegion);
-            
-            if (text && (text !== this.lastDialogue.text || name !== this.lastDialogue.name)) {
-              this.lastDialogue = { name, text };
-              dialoguePreview.style.backgroundImage = `url(${largestRegion.preview})`;
-              ocrText.textContent = name ? `${name}: ${text}` : text;
-              
-              if (name) {
-                this.addNPCToList(name);
-              }
-
-              // Get appropriate voice
-              const selectedVoice = await this.getSelectedVoice(name, largestRegion.boxIndex);
-              if (selectedVoice) {
-                this.ttsEngine.setVoice(selectedVoice);
-              }
-
-              await this.ttsEngine.speak(text);
-              this.lastSpeakTime = Date.now();
-            }
+          // Update preview with the captured region image
+          if (largestRegion.preview) {
+            dialoguePreview.style.backgroundImage = `url(${largestRegion.preview})`;
           }
-        })
-        .catch(error => {
-          console.error('Error processing frame:', error);
-        });
+          
+          ocrText.textContent = name ? `${name}: ${text}` : text;
+          
+          if (name) {
+            this.addNPCToList(name);
+          }
 
-      await this.processingQueue;
+          // Get appropriate voice
+          const selectedVoice = await this.getSelectedVoice(name, largestRegion.boxIndex);
+          if (selectedVoice) {
+            this.ttsEngine.setVoice(selectedVoice);
+          }
+
+          await this.ttsEngine.speak(text);
+          this.lastSpeakTime = Date.now();
+        }
+      }
+    } catch (error) {
+      console.error('Error processing frame:', error);
     } finally {
       this.isProcessing = false;
     }

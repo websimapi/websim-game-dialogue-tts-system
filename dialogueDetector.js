@@ -56,12 +56,23 @@ export class DialogueDetector {
 
     const regionPromises = enabledColors.map(({ color, index }) => 
       this.findColorRegions(imageData, this.hexToRgb(color), this.tolerances[index])
-        .then(regions => regions.map(region => ({...region, boxIndex: index})))
+        .then(regions => regions.map(region => {
+          // Create a temporary canvas for the region preview
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = region.width;
+          tempCanvas.height = region.height;
+          const tempCtx = tempCanvas.getContext('2d');
+          tempCtx.drawImage(video, region.x, region.y, region.width, region.height, 
+                           0, 0, region.width, region.height);
+          region.preview = tempCanvas.toDataURL();
+          return {...region, boxIndex: index};
+        }))
     );
 
     const regionsArrays = await Promise.all(regionPromises);
     const regions = regionsArrays.flat();
 
+    // Visualization
     ctx.strokeStyle = 'red';
     ctx.lineWidth = 2;
     ctx.beginPath();

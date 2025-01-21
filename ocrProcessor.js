@@ -102,6 +102,8 @@ export class OCRProcessor {
   }
 
   async processRegion(video, region) {
+    if (!region) return { name: null, text: '' };
+    
     await this.init();
 
     const canvas = document.createElement('canvas');
@@ -122,8 +124,12 @@ export class OCRProcessor {
     );
 
     try {
+      console.log('Processing OCR for region:', region);
       const { data: { text } } = await this.worker.recognize(canvas);
-      return this.cleanText(text);
+      console.log('Raw OCR text:', text);
+      const cleaned = this.cleanText(text);
+      console.log('Cleaned OCR text:', cleaned);
+      return cleaned;
     } catch (error) {
       console.error('OCR error:', error);
       return { name: null, text: '' };
