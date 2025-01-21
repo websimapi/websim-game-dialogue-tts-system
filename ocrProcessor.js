@@ -102,36 +102,38 @@ export class OCRProcessor {
   }
 
   async processRegion(video, region) {
-    if (!region) return { name: null, text: '' };
+    if (!region || !region.width || !region.height) return { name: null, text: '' };
     
-    await this.init();
-
-    const canvas = document.createElement('canvas');
-    canvas.width = region.width;
-    canvas.height = region.height;
-    const ctx = canvas.getContext('2d');
-    
-    ctx.drawImage(
-      video, 
-      region.x, 
-      region.y, 
-      region.width, 
-      region.height,
-      0,
-      0,
-      region.width,
-      region.height
-    );
-
     try {
-      console.log('Processing OCR for region:', region);
-      const { data: { text } } = await this.worker.recognize(canvas);
-      console.log('Raw OCR text:', text);
-      const cleaned = this.cleanText(text);
-      console.log('Cleaned OCR text:', cleaned);
+      await this.init();
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      // Set canvas size to match region
+      canvas.width = region.width;
+      canvas.height = region.height;
+      
+      // Draw the region to process
+      ctx.drawImage(
+        video,
+        region.x, region.y, region.width, region.height,
+        0, 0, region.width, region.height
+      );
+
+      // Process OCR with optimized settings
+      const result = await this.worker.recognize(canvas, {
+        tessedit_char_whitelist: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!? ',
+        tessedit_pageseg_mode: '7', // Treat image as single text line
+      });
+
+      if (!result?.data?.text) return { name: null, text: '' };
+
+      const cleaned = this.cleanText(result.data.text);
+      console.log('OCR Result:', cleaned);
       return cleaned;
     } catch (error) {
-      console.error('OCR error:', error);
+      console.error('OCR Processing error:', error);
       return { name: null, text: '' };
     }
   }

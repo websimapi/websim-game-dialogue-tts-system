@@ -88,108 +88,118 @@ export class DialogueDetector {
 
   findColorRegions(imageData, targetColor, tolerance) {
     return new Promise((resolve) => {
-      const worker = new Worker(URL.createObjectURL(new Blob([`
-        onmessage = function(e) {
-          const { imageData, targetColor, tolerance } = e.data;
-          const width = imageData.width;
-          const height = imageData.height;
-          const data = imageData.data;
-          const visited = new Set();
-          const regions = [];
+      // Create more efficient region detection by sampling fewer pixels
+      const scanStep = 4; // Check every 4th pixel
+      const minRegionSize = 2000; // Minimum region size in pixels
+      const regions = [];
+      const width = imageData.width;
+      const height = imageData.height;
+      const visited = new Set();
 
-          for (let y = 0; y < height; y += 2) {
-            for (let x = 0; x < width; x += 2) {
-              const index = (y * width + x) * 4;
-              const key = \`${x},${y}\`;
-              
-              if (visited.has(key)) continue;
-              
-              const r = data[index];
-              const g = data[index + 1];
-              const b = data[index + 2];
+      // Use TypedArrays for better performance
+      const data = new Uint8ClampedArray(imageData.data.buffer);
 
-              if (Math.abs(r - targetColor.r) <= tolerance &&
-                  Math.abs(g - targetColor.g) <= tolerance &&
-                  Math.abs(b - targetColor.b) <= tolerance) {
-                const region = floodFill(imageData, x, y, targetColor, tolerance, visited);
-                if (region.width * region.height > 1000) {
-                  regions.push(region);
-                }
-              }
+      for (let y = 0; y < height; y += scanStep) {
+        for (let x = 0; x < width; x += scanStep) {
+          const index = (y * width + x) * 4;
+          const key = `${x},${y}`;
+          
+          if (visited.has(key)) continue;
+
+          const r = data[index];
+          const g = data[index + 1];
+          const b = data[index + 2];
+
+          if (Math.abs(r - targetColor.r) <= tolerance &&
+              Math.abs(g - targetColor.g) <= tolerance &&
+              Math.abs(b - targetColor.b) <= tolerance) {
+            
+            // More efficient flood fill
+            const region = this.floodFillOptimized(imageData, x, y, targetColor, tolerance, visited, scanStep);
+            if (region.width * region.height > minRegionSize) {
+              regions.push(region);
             }
           }
-
-          postMessage(regions);
         }
+      }
 
-        function floodFill(imageData, startX, startY, targetColor, tolerance, visited) {
-          const width = imageData.width;
-          const height = imageData.height;
-          const data = imageData.data;
-          
-          let minX = startX, maxX = startX;
-          let minY = startY, maxY = startY;
-          
-          const stack = [[startX, startY]];
-          
-          while (stack.length > 0) {
-            const [x, y] = stack.pop();
-            const key = \`${x},${y}\`;
-            
-            if (visited.has(key)) continue;
-            visited.add(key);
-            
-            const index = (y * width + x) * 4;
-            const r = data[index];
-            const g = data[index + 1];
-            const b = data[index + 2];
-            
-            if (!(Math.abs(r - targetColor.r) <= tolerance &&
-                Math.abs(g - targetColor.g) <= tolerance &&
-                Math.abs(b - targetColor.b) <= tolerance)) continue;
-            
-            minX = Math.min(minX, x);
-            maxX = Math.max(maxX, x);
-            minY = Math.min(minY, y);
-            maxY = Math.max(maxY, y);
-            
-            if (x > 0) stack.push([x - 1, y]);
-            if (x < width - 1) stack.push([x + 1, y]);
-            if (y > 0) stack.push([x, y - 1]);
-            if (y < height - 1) stack.push([x, y + 1]);
-          }
-          
-          const region = {
-            x: minX,
-            y: minY,
-            width: maxX - minX + 1,
-            height: maxY - minY + 1
-          };
-          
-          return region;
-        }
-      `], { type: 'text/javascript' })));
-
-      worker.onmessage = (e) => {
-        const regions = e.data;
-        worker.terminate();
-        resolve(regions);
-      };
-
-      worker.postMessage({ imageData, targetColor, tolerance });
+      resolve(regions);
     });
+  }
+
+  floodFillOptimized(imageData, startX, startY, targetColor, tolerance, visited, scanStep) {
+    const width = imageData.width;
+    const height = imageData.height;
+    const data = new Uint8ClampedArray(imageData.data.buffer);
+    
+    let minX = startX, maxX = startX;
+    let minY = startY, maxY = startY;
+    
+    const stack = [[startX, startY]];
+    
+    while (stack.length > 0) {
+      const [x, y] = stack.pop();
+      const key = `${x},${y}`;
+      
+      if (visited.has(key)) continue;
+      visited.add(key);
+      
+      const index = (y * width + x) * 4;
+      const r = data[index];
+      const g = data[index + 1];
+      const b = data[index + 2];
+      
+      if (!(Math.abs(r - targetColor.r) <= tolerance &&
+          Math.abs(g - targetColor.g) <= tolerance &&
+          Math.abs(b - targetColor.b) <= tolerance)) continue;
+      
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+      
+      // Step by scanStep when adding new points to check
+      for (let dx = -scanStep; dx <= scanStep; dx += scanStep) {
+        for (let dy = -scanStep; dy <= scanStep; dy += scanStep) {
+          const newX = x + dx;
+          const newY = y + dy;
+          if (newX >= 0 && newX < width && newY >= 0 && newY < height) {
+            stack.push([newX, newY]);
+          }
+        }
+      }
+    }
+    
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX + 1,
+      height: maxY - minY + 1
+    };
   }
 
   createRegionPreview(video, region) {
     const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Ensure canvas size matches region size
     canvas.width = region.width;
     canvas.height = region.height;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 
-      region.x, region.y, region.width, region.height,
-      0, 0, region.width, region.height
-    );
-    return canvas.toDataURL();
+    
+    try {
+      // Draw the region to the canvas
+      ctx.drawImage(
+        video,
+        region.x, region.y, region.width, region.height,  // Source rectangle
+        0, 0, region.width, region.height                 // Destination rectangle
+      );
+      
+      // Convert to data URL
+      return canvas.toDataURL('image/jpeg', 0.8);  // Use JPEG with 0.8 quality for better performance
+    } catch (error) {
+      console.error('Error creating region preview:', error);
+      return null;
+    }
   }
 
   hexToRgb(hex) {

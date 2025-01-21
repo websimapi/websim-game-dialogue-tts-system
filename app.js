@@ -246,13 +246,18 @@ class GameDialogueTTS {
 
     try {
       if (!video.videoWidth || !video.videoHeight) {
-        console.log('Video not ready yet');
         return;
+      }
+
+      // Match canvas size to video size
+      if (debugCanvas.width !== video.videoWidth || debugCanvas.height !== video.videoHeight) {
+        debugCanvas.width = video.videoWidth;
+        debugCanvas.height = video.videoHeight;
       }
 
       const regions = await this.dialogueDetector.detectDialogueRegions(video, debugCanvas);
       
-      if (regions.length > 0) {
+      if (regions && regions.length > 0) {
         // Sort regions by size (largest first)
         regions.sort((a, b) => (b.width * b.height) - (a.width * a.height));
         
@@ -277,7 +282,7 @@ class GameDialogueTTS {
               this.addNPCToList(name);
             }
 
-            // Get voice and speak
+            // Speak the text
             const selectedVoice = await this.getSelectedVoice(name, largestRegion.boxIndex);
             if (selectedVoice) {
               this.ttsEngine.setVoice(selectedVoice);
