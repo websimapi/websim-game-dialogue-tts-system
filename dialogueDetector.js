@@ -50,16 +50,19 @@ export class DialogueDetector {
     const regions = [];
     const imageData = ctx.getImageData(0, 0, debugCanvas.width, debugCanvas.height);
     
-    for (let i = 0; i < this.colors.length; i++) {
-      if (!this.enabled[i] || this.colors[i] === '#ffffff') continue;
-      
+    // Process enabled colors in parallel
+    const enabledColors = this.colors
+      .map((color, index) => ({ color, index }))
+      .filter((item, index) => this.enabled[index] && item.color !== '#ffffff');
+
+    for (const { color, index } of enabledColors) {
       const colorRegions = this.findColorRegions(
         imageData, 
-        this.hexToRgb(this.colors[i]),
-        this.tolerances[i]
+        this.hexToRgb(color),
+        this.tolerances[index]
       );
       
-      regions.push(...colorRegions.map(region => ({...region, boxIndex: i})));
+      regions.push(...colorRegions.map(region => ({...region, boxIndex: index})));
     }
 
     // Draw debug rectangles
@@ -88,8 +91,8 @@ export class DialogueDetector {
     const visited = new Set();
     const regions = [];
 
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
+    for (let y = 0; y < height; y += 2) {
+      for (let x = 0; x < width; x += 2) {
         const index = (y * width + x) * 4;
         const key = `${x},${y}`;
         
