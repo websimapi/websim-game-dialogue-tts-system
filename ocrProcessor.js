@@ -14,13 +14,34 @@ export class OCRProcessor {
   }
 
   cleanText(text) {
-    // Convert to lowercase
-    text = text.toLowerCase();
-    // Remove special characters, keeping only alphanumeric, spaces, and basic punctuation
-    text = text.replace(/[^a-z0-9\s.,!?'-]/g, '');
-    // Clean up multiple spaces
-    text = text.replace(/\s+/g, ' ').trim();
-    return text;
+    // Split into words
+    let words = text.split(/\s+/);
+    
+    // Check for speaker name (first word if all caps)
+    let speakerName = null;
+    if (words.length > 0 && words[0].match(/^[A-Z]+$/)) {
+      speakerName = words[0];
+      words = words.slice(1); // Remove speaker name
+    }
+    
+    // Clean remaining text
+    let cleanedText = words
+      .map(word => {
+        // Convert to lowercase
+        word = word.toLowerCase();
+        // Remove special characters, keeping only alphanumeric and basic punctuation
+        word = word.replace(/[^a-z0-9.,!?'-]/g, '');
+        return word;
+      })
+      // Filter out single letters except 'a' and 'i'
+      .filter(word => word.length > 1 || word === 'a' || word === 'i')
+      .join(' ')
+      .trim();
+
+    return {
+      text: cleanedText,
+      speakerName: speakerName
+    };
   }
 
   async processRegion(video, region) {
@@ -48,7 +69,7 @@ export class OCRProcessor {
       return this.cleanText(text);
     } catch (error) {
       console.error('OCR error:', error);
-      return '';
+      return { text: '', speakerName: null };
     }
   }
 }

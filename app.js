@@ -136,13 +136,18 @@ class GameDialogueTTS {
         const ocrText = document.getElementById('ocrText');
         
         for (const region of regions) {
-          const text = await this.ocrProcessor.processRegion(video, region);
+          const { text, speakerName } = await this.ocrProcessor.processRegion(video, region);
           
           if (text && text !== this.lastDialogue) {
             this.lastDialogue = text;
             dialoguePreview.style.backgroundImage = `url(${region.preview})`;
-            ocrText.textContent = text;
-            await this.ttsEngine.speak(text);
+            
+            // Display speaker name if present
+            const displayText = speakerName ? `${speakerName}: ${text}` : text;
+            ocrText.textContent = displayText;
+            
+            // Speak the text with the appropriate voice
+            await this.ttsEngine.speak(text, speakerName);
           }
         }
       }

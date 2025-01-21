@@ -1,22 +1,38 @@
 export class TTSEngine {
   constructor() {
     this.synth = window.speechSynthesis;
-    this.voice = null;
-    this.initVoice();
+    this.voices = new Map();
+    this.defaultVoice = null;
+    this.initVoices();
   }
 
-  initVoice() {
+  initVoices() {
     // Wait for voices to be loaded
     if (speechSynthesis.onvoiceschanged !== undefined) {
       speechSynthesis.onvoiceschanged = () => {
-        const voices = this.synth.getVoices();
-        // Prefer an English voice
-        this.voice = voices.find(voice => voice.lang.startsWith('en')) || voices[0];
+        const availableVoices = this.synth.getVoices();
+        // Prefer an English voice for default
+        this.defaultVoice = availableVoices.find(voice => voice.lang.startsWith('en')) || availableVoices[0];
+        
+        // Randomly assign different English voices to speakers
+        this.englishVoices = availableVoices.filter(voice => voice.lang.startsWith('en'));
       };
     }
   }
 
-  async speak(text) {
+  getVoiceForSpeaker(speakerName) {
+    if (!speakerName) return this.defaultVoice;
+    
+    if (!this.voices.has(speakerName)) {
+      // Assign a random English voice for this speaker
+      const randomVoice = this.englishVoices[Math.floor(Math.random() * this.englishVoices.length)];
+      this.voices.set(speakerName, randomVoice || this.defaultVoice);
+    }
+    
+    return this.voices.get(speakerName);
+  }
+
+  async speak(text, speakerName) {
     return new Promise((resolve) => {
       if (!text) {
         resolve();
@@ -24,9 +40,7 @@ export class TTSEngine {
       }
 
       const utterance = new SpeechSynthesisUtterance(text);
-      if (this.voice) {
-        utterance.voice = this.voice;
-      }
+      utterance.voice = this.getVoiceForSpeaker(speakerName);
       
       utterance.onend = () => resolve();
       utterance.onerror = () => resolve();
