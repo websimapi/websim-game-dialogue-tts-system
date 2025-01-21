@@ -10,26 +10,66 @@ class GameDialogueTTS {
     this.ocrProcessor = new OCRProcessor();
     this.ttsEngine = new TTSEngine();
     
-    this.setupEventListeners();
     this.isProcessing = false;
     this.lastDialogue = { name: null, text: '' };
     this.scanInterval = null;
     this.isPickingColor = false;
-    this.setupNPCList();
     this.defaultVoices = Array(3).fill(null);
     this.enabledDetectors = Array(3).fill(true);
-    this.loadSettings();
+    
+    this.init();
   }
 
-  loadSettings() {
-    // Load enabled states
+  async init() {
+    await this.loadSettings();
+    this.setupEventListeners();
+    this.setupNPCList();
+  }
+
+  async loadSettings() {
+    // Load colors
     for (let i = 0; i < 3; i++) {
+      const color = localStorage.getItem(`detector${i+1}-color`);
+      if (color) {
+        document.getElementById(`color${i+1}`).value = color;
+        this.dialogueDetector.setColor(i, color);
+      }
+
+      // Load tolerances
+      const tolerance = localStorage.getItem(`detector${i+1}-tolerance`);
+      if (tolerance !== null) {
+        const toleranceValue = parseInt(tolerance);
+        document.getElementById(`tolerance${i+1}`).value = toleranceValue;
+        document.getElementById(`tolerance${i+1}`).nextElementSibling.textContent = toleranceValue;
+        this.dialogueDetector.setTolerance(i, toleranceValue);
+      }
+
+      // Load enabled states
       const enabled = localStorage.getItem(`detector${i+1}-enabled`);
       if (enabled !== null) {
         this.enabledDetectors[i] = enabled === 'true';
         document.getElementById(`enabled${i+1}`).checked = this.enabledDetectors[i];
       }
-      
+    }
+
+    // Load scan interval
+    const interval = localStorage.getItem('scanInterval');
+    if (interval) {
+      const intervalValue = parseInt(interval);
+      document.getElementById('scanInterval').value = intervalValue;
+      document.getElementById('scanInterval').nextElementSibling.textContent = intervalValue;
+    }
+
+    // Load voice settings after voices are available
+    await new Promise(resolve => {
+      if (speechSynthesis.getVoices().length) {
+        resolve();
+      } else {
+        speechSynthesis.onvoiceschanged = resolve;
+      }
+    });
+
+    for (let i = 0; i < 3; i++) {
       const defaultVoice = localStorage.getItem(`detector${i+1}-voice`);
       if (defaultVoice) {
         this.defaultVoices[i] = speechSynthesis.getVoices().find(v => v.name === defaultVoice);
@@ -46,11 +86,14 @@ class GameDialogueTTS {
       const colorInput = document.getElementById(`color${i}`);
       colorInput.addEventListener('input', (e) => {
         this.dialogueDetector.setColor(i-1, e.target.value);
+        localStorage.setItem(`detector${i}-color`, e.target.value);
       });
       
       document.getElementById(`tolerance${i}`).addEventListener('input', (e) => {
-        this.dialogueDetector.setTolerance(i-1, parseInt(e.target.value));
-        e.target.nextElementSibling.textContent = e.target.value;
+        const value = parseInt(e.target.value);
+        this.dialogueDetector.setTolerance(i-1, value);
+        e.target.nextElementSibling.textContent = value;
+        localStorage.setItem(`detector${i}-tolerance`, value);
       });
     }
 
@@ -72,8 +115,10 @@ class GameDialogueTTS {
 
     // Scan interval slider
     document.getElementById('scanInterval').addEventListener('input', (e) => {
-      e.target.nextElementSibling.textContent = e.target.value;
-      this.updateScanInterval(parseInt(e.target.value));
+      const value = e.target.value;
+      e.target.nextElementSibling.textContent = value;
+      this.updateScanInterval(parseInt(value));
+      localStorage.setItem('scanInterval', value);
     });
 
     // Setup voice selects
@@ -231,53 +276,57 @@ class GameDialogueTTS {
     try {
       const regions = this.dialogueDetector.detectDialogueRegions(video, debugCanvas);
       
-      if (regions.length > 0) {
-        const dialoguePreview = document.getElementById('dialoguePreview');
-        const ocrText = document.getElementById('ocrText');
+      for (let i = 0; i < regions.length; i++) {
+        if (!this.enabledDetectors[i]) continue;
         
-        for (let i = 0; i < regions.length; i++) {
-          if (!this.enabledDetectors[i]) continue;
-          
-          const region = regions[i];
-          const { name, text } = await this.ocrProcessor.processRegion(video, region);
-          
-          if (text && (text !== this.lastDialogue.text || name !== this.lastDialogue.name)) {
-            this.lastDialogue = { name, text };
-            dialoguePreview.style.backgroundImage = `url(${region.preview})`;
-            
-            ocrText.textContent = name ? `${name}: ${text}` : text;
-            
-            if (name) {
-              this.addNPCToList(name);
-            }
-
-            // Set voice based on hierarchy: NPC specific > Dialogue box default > System default
-            let selectedVoice = null;
-            if (name) {
-              const voiceSelect = document.querySelector(`[data-npc="${name}"] .voice-select`);
-              if (voiceSelect && voiceSelect.value) {
-                selectedVoice = speechSynthesis.getVoices()
-                  .find(voice => voice.name === voiceSelect.value);
-              }
-            }
-            
-            if (!selectedVoice && this.defaultVoices[i]) {
-              selectedVoice = this.defaultVoices[i];
-            }
-
-            if (selectedVoice) {
-              this.ttsEngine.setVoice(selectedVoice);
-            }
-
-            await this.ttsEngine.speak(text);
-          }
+        const region = regions[i];
+        const result = await this.ocrProcessor.processRegion(video, region);
+        
+        if (result.text && (result.text !== this.lastDialogue.text || result.name !== this.lastDialogue.name)) {
+          this.updateDialogueUI(region, result);
+          await this.handleTTS(result, i);
+          this.lastDialogue = result;
         }
       }
     } catch (error) {
       console.error('Error processing frame:', error);
+    } finally {
+      this.isProcessing = false;
+    }
+  }
+
+  updateDialogueUI(region, result) {
+    const dialoguePreview = document.getElementById('dialoguePreview');
+    const ocrText = document.getElementById('ocrText');
+    
+    dialoguePreview.style.backgroundImage = `url(${region.preview})`;
+    ocrText.textContent = result.name ? `${result.name}: ${result.text}` : result.text;
+    
+    if (result.name) {
+      this.addNPCToList(result.name);
+    }
+  }
+
+  async handleTTS(result, detectorIndex) {
+    let selectedVoice = null;
+    
+    if (result.name) {
+      const voiceSelect = document.querySelector(`[data-npc="${result.name}"] .voice-select`);
+      if (voiceSelect?.value) {
+        selectedVoice = speechSynthesis.getVoices()
+          .find(voice => voice.name === voiceSelect.value);
+      }
+    }
+    
+    if (!selectedVoice && this.defaultVoices[detectorIndex]) {
+      selectedVoice = this.defaultVoices[detectorIndex];
     }
 
-    this.isProcessing = false;
+    if (selectedVoice) {
+      this.ttsEngine.setVoice(selectedVoice);
+    }
+
+    await this.ttsEngine.speak(result.text);
   }
 }
 

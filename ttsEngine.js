@@ -2,18 +2,27 @@ export class TTSEngine {
   constructor() {
     this.synth = window.speechSynthesis;
     this.voice = null;
+    this.queue = Promise.resolve();
     this.initVoice();
   }
 
-  initVoice() {
-    // Wait for voices to be loaded
-    if (speechSynthesis.onvoiceschanged !== undefined) {
-      speechSynthesis.onvoiceschanged = () => {
-        const voices = this.synth.getVoices();
-        // Prefer an English voice
-        this.voice = voices.find(voice => voice.lang.startsWith('en')) || voices[0];
-      };
-    }
+  async initVoice() {
+    await new Promise(resolve => {
+      if (this.synth.getVoices().length) {
+        this.setDefaultVoice();
+        resolve();
+      } else {
+        this.synth.onvoiceschanged = () => {
+          this.setDefaultVoice();
+          resolve();
+        };
+      }
+    });
+  }
+
+  setDefaultVoice() {
+    const voices = this.synth.getVoices();
+    this.voice = voices.find(voice => voice.lang.startsWith('en')) || voices[0];
   }
 
   setVoice(voice) {
@@ -21,11 +30,19 @@ export class TTSEngine {
   }
 
   async speak(text) {
+    // Queue the speech and return a promise
+    return this.queue = this.queue.then(() => this.speakNow(text));
+  }
+
+  speakNow(text) {
     return new Promise((resolve) => {
       if (!text) {
         resolve();
         return;
       }
+
+      // Cancel any ongoing speech
+      this.synth.cancel();
 
       const utterance = new SpeechSynthesisUtterance(text);
       if (this.voice) {

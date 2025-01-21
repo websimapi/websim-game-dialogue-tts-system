@@ -2,14 +2,24 @@ export class DialogueDetector {
   constructor() {
     this.colors = Array(3).fill('#ffffff');
     this.tolerances = Array(3).fill(10);
+    this.cache = new Map();
+    this.cacheTimeout = 1000; // 1 second cache timeout
   }
 
   setColor(index, color) {
     this.colors[index] = color;
+    this.cache.clear();
   }
 
   setTolerance(index, tolerance) {
     this.tolerances[index] = tolerance;
+    this.cache.clear();
+  }
+
+  getCacheKey(imageData) {
+    // Create a cache key from the first and last few pixels
+    const samples = new Uint32Array(imageData.data.buffer, 0, 100);
+    return samples.join(',');
   }
 
   detectDialogueRegions(video, debugCanvas) {
@@ -18,8 +28,17 @@ export class DialogueDetector {
     const ctx = debugCanvas.getContext('2d');
     ctx.drawImage(video, 0, 0);
     
-    const regions = [];
     const imageData = ctx.getImageData(0, 0, debugCanvas.width, debugCanvas.height);
+    const cacheKey = this.getCacheKey(imageData);
+    
+    // Check cache
+    const cachedResult = this.cache.get(cacheKey);
+    if (cachedResult && (Date.now() - cachedResult.timestamp) < this.cacheTimeout) {
+      this.drawDebugRects(ctx, cachedResult.regions);
+      return cachedResult.regions;
+    }
+    
+    const regions = [];
     
     for (let i = 0; i < this.colors.length; i++) {
       if (this.colors[i] === '#ffffff') continue;
@@ -33,14 +52,22 @@ export class DialogueDetector {
       regions.push(...colorRegions);
     }
 
-    // Draw debug rectangles
+    // Cache the result
+    this.cache.set(cacheKey, {
+      regions: regions,
+      timestamp: Date.now()
+    });
+
+    this.drawDebugRects(ctx, regions);
+    return regions;
+  }
+
+  drawDebugRects(ctx, regions) {
     ctx.strokeStyle = 'red';
     ctx.lineWidth = 2;
     regions.forEach(region => {
       ctx.strokeRect(region.x, region.y, region.width, region.height);
     });
-
-    return regions;
   }
 
   hexToRgb(hex) {
