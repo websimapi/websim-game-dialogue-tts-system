@@ -3,6 +3,18 @@ export class OCRProcessor {
     this.worker = Tesseract.createWorker();
     this.initialized = false;
     this.npcNames = new Set(this.loadNPCNames());
+    this.dictionary = null;
+    this.loadDictionary();
+  }
+
+  async loadDictionary() {
+    try {
+      const response = await fetch('/simple_english_dictionary.json');
+      this.dictionary = new Set(await response.json());
+    } catch (error) {
+      console.error('Error loading dictionary:', error);
+      this.dictionary = new Set(); // Fallback to empty set
+    }
   }
 
   loadNPCNames() {
@@ -31,6 +43,23 @@ export class OCRProcessor {
     return { name: null, text };
   }
 
+  validateWords(text) {
+    if (!this.dictionary) return text; // If dictionary not loaded, return original text
+
+    return text.split(/\s+/)
+      .filter(word => {
+        // Always keep basic words 'a' and 'i'
+        if (word === 'a' || word === 'i') return true;
+
+        // Remove punctuation for dictionary lookup
+        const cleanWord = word.replace(/[.,!?']/g, '').toLowerCase();
+        
+        // Keep word if it's in the dictionary
+        return this.dictionary.has(cleanWord);
+      })
+      .join(' ');
+  }
+
   cleanText(text) {
     // Extract NPC name first if present
     const { name, text: remainingText } = this.extractNPCName(text);
@@ -56,6 +85,9 @@ export class OCRProcessor {
       })
       .join(' ')
       .trim();
+    
+    // Validate words against dictionary
+    cleanedText = this.validateWords(cleanedText);
     
     return { name, text: cleanedText };
   }
