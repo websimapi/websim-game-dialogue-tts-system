@@ -42,10 +42,18 @@ export class DialogueDetector {
   }
 
   async detectDialogueRegions(video, debugCanvas) {
+    // Ensure canvas dimensions match video dimensions
+    if (debugCanvas.width !== video.videoWidth || debugCanvas.height !== video.videoHeight) {
+      debugCanvas.width = video.videoWidth;
+      debugCanvas.height = video.videoHeight;
+    }
+
     const ctx = debugCanvas.getContext('2d', { alpha: false });
-    debugCanvas.width = video.videoWidth;
-    debugCanvas.height = video.videoHeight;
     
+    // Clear previous frame
+    ctx.clearRect(0, 0, debugCanvas.width, debugCanvas.height);
+    
+    // Draw current frame
     ctx.drawImage(video, 0, 0);
     
     const imageData = ctx.getImageData(0, 0, debugCanvas.width, debugCanvas.height);
@@ -54,32 +62,26 @@ export class DialogueDetector {
       .map((color, index) => ({ color, index }))
       .filter((item, index) => this.enabled[index] && item.color !== '#ffffff');
 
-    const regionPromises = enabledColors.map(({ color, index }) => 
-      this.findColorRegions(imageData, this.hexToRgb(color), this.tolerances[index])
-        .then(regions => regions.map(region => {
-          // Create a temporary canvas for the region preview
-          const tempCanvas = document.createElement('canvas');
-          tempCanvas.width = region.width;
-          tempCanvas.height = region.height;
-          const tempCtx = tempCanvas.getContext('2d');
-          tempCtx.drawImage(video, region.x, region.y, region.width, region.height, 
-                           0, 0, region.width, region.height);
-          region.preview = tempCanvas.toDataURL();
-          return {...region, boxIndex: index};
-        }))
-    );
+    if (enabledColors.length === 0) return [];
+
+    const regionPromises = enabledColors.map(async ({ color, index }) => {
+      const regions = await this.findColorRegions(imageData, this.hexToRgb(color), this.tolerances[index]);
+      return regions.map(region => ({
+        ...region,
+        boxIndex: index,
+        preview: this.createRegionPreview(video, region)
+      }));
+    });
 
     const regionsArrays = await Promise.all(regionPromises);
     const regions = regionsArrays.flat();
 
-    // Visualization
+    // Draw debug visualization
     ctx.strokeStyle = 'red';
     ctx.lineWidth = 2;
-    ctx.beginPath();
     regions.forEach(region => {
-      ctx.rect(region.x, region.y, region.width, region.height);
+      ctx.strokeRect(region.x, region.y, region.width, region.height);
     });
-    ctx.stroke();
 
     return regions;
   }
@@ -176,6 +178,18 @@ export class DialogueDetector {
 
       worker.postMessage({ imageData, targetColor, tolerance });
     });
+  }
+
+  createRegionPreview(video, region) {
+    const canvas = document.createElement('canvas');
+    canvas.width = region.width;
+    canvas.height = region.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 
+      region.x, region.y, region.width, region.height,
+      0, 0, region.width, region.height
+    );
+    return canvas.toDataURL();
   }
 
   hexToRgb(hex) {
