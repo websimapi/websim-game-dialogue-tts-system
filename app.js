@@ -13,6 +13,7 @@ class GameDialogueTTS {
     this.setupEventListeners();
     this.isProcessing = false;
     this.lastDialogue = '';
+    this.recentDialogues = []; // Store recent dialogues for similarity checking
     this.scanInterval = null;
     this.isPickingColor = false;
   }
@@ -121,6 +122,52 @@ class GameDialogueTTS {
     }
   }
 
+  calculateSimilarity(str1, str2) {
+    if (!str1 || !str2) return 0;
+    
+    const longer = str1.length > str2.length ? str1 : str2;
+    const shorter = str1.length > str2.length ? str2 : str1;
+    
+    const longerLength = longer.length;
+    if (longerLength === 0) return 1.0;
+
+    const costs = [];
+    for (let i = 0; i <= shorter.length; i++) {
+      let lastValue = i;
+      for (let j = 0; j <= longer.length; j++) {
+        if (i === 0) {
+          costs[j] = j;
+        } else if (j > 0) {
+          let newValue = costs[j - 1];
+          if (shorter.charAt(i - 1) !== longer.charAt(j - 1)) {
+            newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+          }
+          costs[j - 1] = lastValue;
+          lastValue = newValue;
+        }
+      }
+      if (i > 0) costs[longer.length] = lastValue;
+    }
+
+    return ((longerLength - costs[longer.length - 1]) / longerLength) * 100;
+  }
+
+  isTextTooSimilarToRecent(text) {
+    for (const recentText of this.recentDialogues) {
+      if (this.calculateSimilarity(text, recentText) > 95) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  updateRecentDialogues(text) {
+    this.recentDialogues.unshift(text);
+    if (this.recentDialogues.length > 10) { // Keep last 10 dialogues
+      this.recentDialogues.pop();
+    }
+  }
+
   async processFrame() {
     if (this.isProcessing) return;
     this.isProcessing = true;
@@ -138,8 +185,9 @@ class GameDialogueTTS {
         for (const region of regions) {
           const text = await this.ocrProcessor.processRegion(video, region);
           
-          if (text && text !== this.lastDialogue) {
+          if (text && text !== this.lastDialogue && !this.isTextTooSimilarToRecent(text)) {
             this.lastDialogue = text;
+            this.updateRecentDialogues(text);
             dialoguePreview.style.backgroundImage = `url(${region.preview})`;
             ocrText.textContent = text;
             await this.ttsEngine.speak(text);
