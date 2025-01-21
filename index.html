@@ -16,6 +16,7 @@
         <div class="color-picker">
           <label>Color 1:</label>
           <input type="color" id="color1" value="#ffffff">
+          <button class="pick-button" data-picker="1">Pick from screen</button>
           <span class="tolerance">
             Tolerance: <input type="range" min="0" max="50" value="10" id="tolerance1">
             <span class="value">10</span>
@@ -24,6 +25,7 @@
         <div class="color-picker">
           <label>Color 2:</label>
           <input type="color" id="color2" value="#ffffff">
+          <button class="pick-button" data-picker="2">Pick from screen</button>
           <span class="tolerance">
             Tolerance: <input type="range" min="0" max="50" value="10" id="tolerance2">
             <span class="value">10</span>
@@ -32,6 +34,7 @@
         <div class="color-picker">
           <label>Color 3:</label>
           <input type="color" id="color3" value="#ffffff">
+          <button class="pick-button" data-picker="3">Pick from screen</button>
           <span class="tolerance">
             Tolerance: <input type="range" min="0" max="50" value="10" id="tolerance3">
             <span class="value">10</span>
@@ -62,6 +65,8 @@
       </div>
     </div>
   </div>
+
+  <div class="color-pick-overlay"></div>
 
   <script src="https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js"></script>
   <script type="module" src="app.js"></script>

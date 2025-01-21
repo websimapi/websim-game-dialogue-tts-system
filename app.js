@@ -14,6 +14,7 @@ class GameDialogueTTS {
     this.isProcessing = false;
     this.lastDialogue = '';
     this.scanInterval = null;
+    this.isPickingColor = false;
   }
 
   setupEventListeners() {
@@ -21,7 +22,8 @@ class GameDialogueTTS {
     
     // Setup color picker events
     for (let i = 1; i <= 3; i++) {
-      document.getElementById(`color${i}`).addEventListener('input', (e) => {
+      const colorInput = document.getElementById(`color${i}`);
+      colorInput.addEventListener('input', (e) => {
         this.dialogueDetector.setColor(i-1, e.target.value);
       });
       
@@ -31,11 +33,72 @@ class GameDialogueTTS {
       });
     }
 
+    // Setup color pick from screen buttons
+    document.querySelectorAll('.pick-button').forEach(button => {
+      button.addEventListener('click', (e) => {
+        const pickerIndex = parseInt(e.target.dataset.picker) - 1;
+        this.startColorPick(pickerIndex);
+      });
+    });
+
+    // Setup color pick overlay
+    const overlay = document.querySelector('.color-pick-overlay');
+    overlay.addEventListener('click', (e) => {
+      if (this.isPickingColor) {
+        this.pickColor(e);
+      }
+    });
+
     // Scan interval slider
     document.getElementById('scanInterval').addEventListener('input', (e) => {
       e.target.nextElementSibling.textContent = e.target.value;
       this.updateScanInterval(parseInt(e.target.value));
     });
+  }
+
+  startColorPick(pickerIndex) {
+    this.isPickingColor = true;
+    this.currentPickerIndex = pickerIndex;
+    document.querySelector('.color-pick-overlay').classList.add('active');
+  }
+
+  pickColor(event) {
+    const video = document.getElementById('gameVideo');
+    const rect = video.getBoundingClientRect();
+    
+    // Check if click is within video bounds
+    if (event.clientX >= rect.left && event.clientX <= rect.right &&
+        event.clientY >= rect.top && event.clientY <= rect.bottom) {
+      
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      
+      // Create temporary canvas to sample color
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0);
+      
+      // Get color at click position
+      const scaleX = video.videoWidth / video.offsetWidth;
+      const scaleY = video.videoHeight / video.offsetHeight;
+      const pixel = ctx.getImageData(x * scaleX, y * scaleY, 1, 1).data;
+      
+      // Convert to hex
+      const color = '#' + [pixel[0], pixel[1], pixel[2]]
+        .map(x => x.toString(16).padStart(2, '0'))
+        .join('');
+      
+      // Update color picker and detector
+      const colorInput = document.getElementById(`color${this.currentPickerIndex + 1}`);
+      colorInput.value = color;
+      this.dialogueDetector.setColor(this.currentPickerIndex, color);
+    }
+    
+    // Reset picking state
+    this.isPickingColor = false;
+    document.querySelector('.color-pick-overlay').classList.remove('active');
   }
 
   async startCapture() {
