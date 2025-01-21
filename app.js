@@ -11,64 +11,30 @@ class GameDialogueTTS {
     this.ttsEngine = new TTSEngine();
     
     this.setupEventListeners();
-    this.populateVoiceSelects();
-    this.loadSavedSettings();
     this.isProcessing = false;
     this.lastDialogue = { name: null, text: '' };
     this.scanInterval = null;
     this.isPickingColor = false;
     this.setupNPCList();
-    this.lastSpeakTime = 0;
-    this.processingQueue = Promise.resolve();
+    this.defaultVoices = Array(3).fill(null);
+    this.enabledDetectors = Array(3).fill(true);
+    this.loadSettings();
   }
 
-  populateVoiceSelects() {
-    const populateSelect = (select) => {
-      select.innerHTML = `
-        <option value="">Default Voice</option>
-        ${speechSynthesis.getVoices().map(voice => 
-          `<option value="${voice.name}">${voice.name} (${voice.lang})</option>`
-        ).join('')}
-      `;
-    };
-
-    const voiceSelects = document.querySelectorAll('.voice-select');
-    voiceSelects.forEach(select => populateSelect(select));
-
-    // Handle dynamic voice loading
-    speechSynthesis.onvoiceschanged = () => {
-      voiceSelects.forEach(select => populateSelect(select));
-      this.loadSavedSettings();
-    };
-  }
-
-  loadSavedSettings() {
-    // Load color picker settings
-    for (let i = 1; i <= 3; i++) {
-      const colorInput = document.getElementById(`color${i}`);
-      const toleranceInput = document.getElementById(`tolerance${i}`);
-      const enableInput = document.getElementById(`enable${i}`);
-      const voiceSelect = document.getElementById(`voice${i}`);
-
-      const savedColor = localStorage.getItem(`dialogueColor${i-1}`);
-      const savedTolerance = localStorage.getItem(`dialogueTolerance${i-1}`);
-      const savedEnabled = localStorage.getItem(`dialogueEnabled${i-1}`);
-      const savedVoice = localStorage.getItem(`dialogueVoice${i-1}`);
-
-      if (savedColor) colorInput.value = savedColor;
-      if (savedTolerance) {
-        toleranceInput.value = savedTolerance;
-        toleranceInput.nextElementSibling.textContent = savedTolerance;
+  loadSettings() {
+    // Load enabled states
+    for (let i = 0; i < 3; i++) {
+      const enabled = localStorage.getItem(`detector${i+1}-enabled`);
+      if (enabled !== null) {
+        this.enabledDetectors[i] = enabled === 'true';
+        document.getElementById(`enabled${i+1}`).checked = this.enabledDetectors[i];
       }
-      if (savedEnabled !== null) enableInput.checked = savedEnabled === 'true';
-      if (savedVoice) voiceSelect.value = savedVoice;
-    }
-
-    // Load TTS delay setting
-    const savedTTSDelay = localStorage.getItem('ttsDelay');
-    if (savedTTSDelay) {
-      document.getElementById('ttsDelay').value = savedTTSDelay;
-      document.getElementById('ttsDelay').nextElementSibling.textContent = savedTTSDelay;
+      
+      const defaultVoice = localStorage.getItem(`detector${i+1}-voice`);
+      if (defaultVoice) {
+        this.defaultVoices[i] = speechSynthesis.getVoices().find(v => v.name === defaultVoice);
+        document.getElementById(`defaultVoice${i+1}`).value = defaultVoice;
+      }
     }
   }
 
@@ -78,9 +44,6 @@ class GameDialogueTTS {
     // Setup color picker events
     for (let i = 1; i <= 3; i++) {
       const colorInput = document.getElementById(`color${i}`);
-      const enableInput = document.getElementById(`enable${i}`);
-      const voiceSelect = document.getElementById(`voice${i}`);
-
       colorInput.addEventListener('input', (e) => {
         this.dialogueDetector.setColor(i-1, e.target.value);
       });
@@ -88,14 +51,6 @@ class GameDialogueTTS {
       document.getElementById(`tolerance${i}`).addEventListener('input', (e) => {
         this.dialogueDetector.setTolerance(i-1, parseInt(e.target.value));
         e.target.nextElementSibling.textContent = e.target.value;
-      });
-
-      enableInput.addEventListener('change', (e) => {
-        this.dialogueDetector.setEnabled(i-1, e.target.checked);
-      });
-
-      voiceSelect.addEventListener('change', (e) => {
-        localStorage.setItem(`dialogueVoice${i-1}`, e.target.value);
       });
     }
 
@@ -121,11 +76,35 @@ class GameDialogueTTS {
       this.updateScanInterval(parseInt(e.target.value));
     });
 
-    // TTS delay slider
-    document.getElementById('ttsDelay').addEventListener('input', (e) => {
-      e.target.nextElementSibling.textContent = e.target.value;
-      localStorage.setItem('ttsDelay', e.target.value);
-    });
+    // Setup voice selects
+    const setupVoiceSelects = () => {
+      const voices = speechSynthesis.getVoices();
+      document.querySelectorAll('.default-voice').forEach(select => {
+        select.innerHTML = `
+          <option value="">System Default</option>
+          ${voices.map(voice => 
+            `<option value="${voice.name}">${voice.name} (${voice.lang})</option>`
+          ).join('')}
+        `;
+      });
+    };
+
+    speechSynthesis.onvoiceschanged = setupVoiceSelects;
+    setupVoiceSelects();
+
+    // Setup default voice and enabled toggles
+    for (let i = 1; i <= 3; i++) {
+      document.getElementById(`enabled${i}`).addEventListener('change', (e) => {
+        this.enabledDetectors[i-1] = e.target.checked;
+        localStorage.setItem(`detector${i}-enabled`, e.target.checked);
+      });
+
+      document.getElementById(`defaultVoice${i}`).addEventListener('change', (e) => {
+        const voice = speechSynthesis.getVoices().find(v => v.name === e.target.value);
+        this.defaultVoices[i-1] = voice;
+        localStorage.setItem(`detector${i}-voice`, e.target.value);
+      });
+    }
   }
 
   setupNPCList() {
@@ -143,7 +122,10 @@ class GameDialogueTTS {
       div.classList.add('npc-item');
       div.dataset.npc = name;
       div.innerHTML = `
-        <span>${name}</span>
+        <div class="npc-header">
+          <span>${name}</span>
+          <button class="delete-npc">Delete</button>
+        </div>
         <select class="voice-select">
           <option value="">Default Voice</option>
           ${speechSynthesis.getVoices().map(voice => 
@@ -162,6 +144,14 @@ class GameDialogueTTS {
       // Save voice preference on change
       div.querySelector('.voice-select').addEventListener('change', (e) => {
         localStorage.setItem(`npc-voice-${name}`, e.target.value);
+      });
+
+      // Delete NPC handler
+      div.querySelector('.delete-npc').addEventListener('click', () => {
+        localStorage.removeItem(`npc-voice-${name}`);
+        this.ocrProcessor.npcNames.delete(name);
+        this.ocrProcessor.saveNPCNames();
+        div.remove();
       });
     }
   }
@@ -233,48 +223,27 @@ class GameDialogueTTS {
 
   async processFrame() {
     if (this.isProcessing) return;
-    
-    const ttsDelay = parseInt(document.getElementById('ttsDelay').value);
-    const timeSinceLastSpeak = Date.now() - this.lastSpeakTime;
-    if (timeSinceLastSpeak < ttsDelay) {
-      return;
-    }
-
     this.isProcessing = true;
+
     const video = document.getElementById('gameVideo');
     const debugCanvas = document.getElementById('debugCanvas');
-
+    
     try {
-      if (!video.videoWidth || !video.videoHeight) {
-        return;
-      }
-
-      // Match canvas size to video size
-      if (debugCanvas.width !== video.videoWidth || debugCanvas.height !== video.videoHeight) {
-        debugCanvas.width = video.videoWidth;
-        debugCanvas.height = video.videoHeight;
-      }
-
-      const regions = await this.dialogueDetector.detectDialogueRegions(video, debugCanvas);
+      const regions = this.dialogueDetector.detectDialogueRegions(video, debugCanvas);
       
-      if (regions && regions.length > 0) {
-        // Sort regions by size (largest first)
-        regions.sort((a, b) => (b.width * b.height) - (a.width * a.height));
-        
-        const largestRegion = regions[0];
+      if (regions.length > 0) {
         const dialoguePreview = document.getElementById('dialoguePreview');
         const ocrText = document.getElementById('ocrText');
         
-        if (largestRegion) {
-          const { name, text } = await this.ocrProcessor.processRegion(video, largestRegion);
+        for (let i = 0; i < regions.length; i++) {
+          if (!this.enabledDetectors[i]) continue;
+          
+          const region = regions[i];
+          const { name, text } = await this.ocrProcessor.processRegion(video, region);
           
           if (text && (text !== this.lastDialogue.text || name !== this.lastDialogue.name)) {
             this.lastDialogue = { name, text };
-            
-            // Update preview
-            if (largestRegion.preview) {
-              dialoguePreview.style.backgroundImage = `url(${largestRegion.preview})`;
-            }
+            dialoguePreview.style.backgroundImage = `url(${region.preview})`;
             
             ocrText.textContent = name ? `${name}: ${text}` : text;
             
@@ -282,45 +251,34 @@ class GameDialogueTTS {
               this.addNPCToList(name);
             }
 
-            // Speak the text
-            const selectedVoice = await this.getSelectedVoice(name, largestRegion.boxIndex);
+            // Set voice based on hierarchy: NPC specific > Dialogue box default > System default
+            let selectedVoice = null;
+            if (name) {
+              const voiceSelect = document.querySelector(`[data-npc="${name}"] .voice-select`);
+              if (voiceSelect && voiceSelect.value) {
+                selectedVoice = speechSynthesis.getVoices()
+                  .find(voice => voice.name === voiceSelect.value);
+              }
+            }
+            
+            if (!selectedVoice && this.defaultVoices[i]) {
+              selectedVoice = this.defaultVoices[i];
+            }
+
             if (selectedVoice) {
               this.ttsEngine.setVoice(selectedVoice);
             }
 
             await this.ttsEngine.speak(text);
-            this.lastSpeakTime = Date.now();
           }
         }
       }
     } catch (error) {
       console.error('Error processing frame:', error);
-    } finally {
-      this.isProcessing = false;
     }
-  }
 
-  async getSelectedVoice(name, boxIndex) {
-    const voices = speechSynthesis.getVoices();
-    
-    if (name) {
-      const voiceSelect = document.querySelector(`[data-npc="${name}"] .voice-select`);
-      if (voiceSelect?.value) {
-        return voices.find(voice => voice.name === voiceSelect.value);
-      }
-    }
-    
-    if (boxIndex !== undefined) {
-      const boxVoice = document.getElementById(`voice${boxIndex + 1}`).value;
-      if (boxVoice) {
-        return voices.find(voice => voice.name === boxVoice);
-      }
-    }
-    
-    return null;
+    this.isProcessing = false;
   }
 }
 
-window.addEventListener('load', () => {
-  const app = new GameDialogueTTS();
-});
+const app = new GameDialogueTTS();

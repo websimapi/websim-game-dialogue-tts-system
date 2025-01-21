@@ -44,7 +44,6 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  position: relative;
   padding: 10px;
   border: 1px solid #ddd;
   border-radius: 4px;
@@ -56,7 +55,7 @@
   gap: 10px;
 }
 
-.color-picker-controls {
+.color-picker-settings {
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -68,16 +67,8 @@
   gap: 5px;
 }
 
-.enable-toggle {
-  margin-left: auto;
-}
-
 input[type="range"] {
   width: 100px;
-}
-
-.scan-settings input[type="range"] {
-  width: 100%;
 }
 
 .dialogue-preview {
@@ -92,10 +83,6 @@ input[type="range"] {
   padding: 10px;
   background: white;
   border-radius: 4px;
-  background-size: contain;
-  background-repeat: no-repeat;
-  background-position: center;
-  min-height: 150px;
 }
 
 #ocrText {
@@ -146,17 +133,6 @@ button:hover {
   background: #777;
 }
 
-.scan-settings {
-  margin: 20px 0;
-}
-
-.scan-settings label {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin-bottom: 10px;
-}
-
 .npc-voices {
   margin-top: 20px;
   padding-top: 20px;
@@ -173,8 +149,24 @@ button:hover {
   gap: 5px;
 }
 
+.npc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .npc-item span {
   font-weight: bold;
+}
+
+.delete-npc {
+  background: #dc3545;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+.delete-npc:hover {
+  background: #c82333;
 }
 
 .voice-select {
@@ -186,10 +178,11 @@ button:hover {
 
 .voice-settings {
   margin-top: 10px;
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 4px;
 }
 
-.voice-settings select {
-  width: 100%;
-  padding: 5px;
-  margin-top: 5px;
+.enabled-toggle {
+  margin-bottom: 10px;
 }

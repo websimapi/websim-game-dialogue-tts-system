@@ -3,18 +3,6 @@ export class OCRProcessor {
     this.worker = Tesseract.createWorker();
     this.initialized = false;
     this.npcNames = new Set(this.loadNPCNames());
-    this.dictionary = null;
-    this.loadDictionary();
-  }
-
-  async loadDictionary() {
-    try {
-      const response = await fetch('/simple_english_dictionary.json');
-      this.dictionary = new Set(await response.json());
-    } catch (error) {
-      console.error('Error loading dictionary:', error);
-      this.dictionary = new Set(); // Fallback to empty set
-    }
   }
 
   loadNPCNames() {
@@ -43,23 +31,6 @@ export class OCRProcessor {
     return { name: null, text };
   }
 
-  validateWords(text) {
-    if (!this.dictionary) return text; // If dictionary not loaded, return original text
-
-    return text.split(/\s+/)
-      .filter(word => {
-        // Always keep basic words 'a' and 'i'
-        if (word === 'a' || word === 'i') return true;
-
-        // Remove punctuation for dictionary lookup
-        const cleanWord = word.replace(/[.,!?']/g, '').toLowerCase();
-        
-        // Keep word if it's in the dictionary
-        return this.dictionary.has(cleanWord);
-      })
-      .join(' ');
-  }
-
   cleanText(text) {
     // Extract NPC name first if present
     const { name, text: remainingText } = this.extractNPCName(text);
@@ -86,9 +57,6 @@ export class OCRProcessor {
       .join(' ')
       .trim();
     
-    // Validate words against dictionary
-    cleanedText = this.validateWords(cleanedText);
-    
     return { name, text: cleanedText };
   }
 
@@ -102,38 +70,30 @@ export class OCRProcessor {
   }
 
   async processRegion(video, region) {
-    if (!region || !region.width || !region.height) return { name: null, text: '' };
+    await this.init();
+
+    const canvas = document.createElement('canvas');
+    canvas.width = region.width;
+    canvas.height = region.height;
+    const ctx = canvas.getContext('2d');
     
+    ctx.drawImage(
+      video, 
+      region.x, 
+      region.y, 
+      region.width, 
+      region.height,
+      0,
+      0,
+      region.width,
+      region.height
+    );
+
     try {
-      await this.init();
-
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      
-      // Set canvas size to match region
-      canvas.width = region.width;
-      canvas.height = region.height;
-      
-      // Draw the region to process
-      ctx.drawImage(
-        video,
-        region.x, region.y, region.width, region.height,
-        0, 0, region.width, region.height
-      );
-
-      // Process OCR with optimized settings
-      const result = await this.worker.recognize(canvas, {
-        tessedit_char_whitelist: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!? ',
-        tessedit_pageseg_mode: '7', // Treat image as single text line
-      });
-
-      if (!result?.data?.text) return { name: null, text: '' };
-
-      const cleaned = this.cleanText(result.data.text);
-      console.log('OCR Result:', cleaned);
-      return cleaned;
+      const { data: { text } } = await this.worker.recognize(canvas);
+      return this.cleanText(text);
     } catch (error) {
-      console.error('OCR Processing error:', error);
+      console.error('OCR error:', error);
       return { name: null, text: '' };
     }
   }

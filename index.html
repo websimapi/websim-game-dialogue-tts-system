@@ -16,20 +16,24 @@
         <div class="color-picker">
           <div class="color-picker-header">
             <label>Color 1:</label>
-            <input type="checkbox" class="enable-toggle" id="enable1" checked>
+            <input type="color" id="color1" value="#ffffff">
+            <button class="pick-button" data-picker="1">Pick from screen</button>
           </div>
-          <div class="color-picker-controls">
-            <div>
-              <input type="color" id="color1" value="#ffffff">
-              <button class="pick-button" data-picker="1">Pick from screen</button>
-            </div>
+          <div class="color-picker-settings">
             <span class="tolerance">
               Tolerance: <input type="range" min="0" max="50" value="10" id="tolerance1">
               <span class="value">10</span>
             </span>
             <div class="voice-settings">
-              <label>Default Voice for Box 1:</label>
-              <select id="voice1" class="voice-select"></select>
+              <div class="enabled-toggle">
+                <input type="checkbox" id="enabled1" checked>
+                <label for="enabled1">Enable Detection</label>
+              </div>
+              <label>Default Voice:
+                <select class="default-voice" id="defaultVoice1">
+                  <option value="">System Default</option>
+                </select>
+              </label>
             </div>
           </div>
         </div>
@@ -37,20 +41,24 @@
         <div class="color-picker">
           <div class="color-picker-header">
             <label>Color 2:</label>
-            <input type="checkbox" class="enable-toggle" id="enable2" checked>
+            <input type="color" id="color2" value="#ffffff">
+            <button class="pick-button" data-picker="2">Pick from screen</button>
           </div>
-          <div class="color-picker-controls">
-            <div>
-              <input type="color" id="color2" value="#ffffff">
-              <button class="pick-button" data-picker="2">Pick from screen</button>
-            </div>
+          <div class="color-picker-settings">
             <span class="tolerance">
               Tolerance: <input type="range" min="0" max="50" value="10" id="tolerance2">
               <span class="value">10</span>
             </span>
             <div class="voice-settings">
-              <label>Default Voice for Box 2:</label>
-              <select id="voice2" class="voice-select"></select>
+              <div class="enabled-toggle">
+                <input type="checkbox" id="enabled2" checked>
+                <label for="enabled2">Enable Detection</label>
+              </div>
+              <label>Default Voice:
+                <select class="default-voice" id="defaultVoice2">
+                  <option value="">System Default</option>
+                </select>
+              </label>
             </div>
           </div>
         </div>
@@ -58,20 +66,24 @@
         <div class="color-picker">
           <div class="color-picker-header">
             <label>Color 3:</label>
-            <input type="checkbox" class="enable-toggle" id="enable3" checked>
+            <input type="color" id="color3" value="#ffffff">
+            <button class="pick-button" data-picker="3">Pick from screen</button>
           </div>
-          <div class="color-picker-controls">
-            <div>
-              <input type="color" id="color3" value="#ffffff">
-              <button class="pick-button" data-picker="3">Pick from screen</button>
-            </div>
+          <div class="color-picker-settings">
             <span class="tolerance">
               Tolerance: <input type="range" min="0" max="50" value="10" id="tolerance3">
               <span class="value">10</span>
             </span>
             <div class="voice-settings">
-              <label>Default Voice for Box 3:</label>
-              <select id="voice3" class="voice-select"></select>
+              <div class="enabled-toggle">
+                <input type="checkbox" id="enabled3" checked>
+                <label for="enabled3">Enable Detection</label>
+              </div>
+              <label>Default Voice:
+                <select class="default-voice" id="defaultVoice3">
+                  <option value="">System Default</option>
+                </select>
+              </label>
             </div>
           </div>
         </div>
@@ -83,11 +95,6 @@
           Scan Interval (ms):
           <input type="range" id="scanInterval" min="100" max="2000" value="500">
           <span class="value">500</span>
-        </label>
-        <label>
-          TTS Delay After Speaking (ms):
-          <input type="range" id="ttsDelay" min="0" max="5000" value="1000">
-          <span class="value">1000</span>
         </label>
       </div>
 
