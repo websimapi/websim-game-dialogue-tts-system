@@ -90,9 +90,13 @@ export class DialogueDetector {
     const data = imageData.data;
     const visited = new Set();
     const regions = [];
-
-    for (let y = 0; y < height; y += 2) {
-      for (let x = 0; x < width; x += 2) {
+    
+    // Increase step size for initial scan
+    const stepSize = 4;
+    
+    // Check pixels in a grid pattern for better performance
+    for (let y = 0; y < height; y += stepSize) {
+      for (let x = 0; x < width; x += stepSize) {
         const index = (y * width + x) * 4;
         const key = `${x},${y}`;
         
@@ -104,14 +108,18 @@ export class DialogueDetector {
 
         if (this.isColorMatch(r, g, b, targetColor, tolerance)) {
           const region = this.floodFill(imageData, x, y, targetColor, tolerance, visited);
-          if (region.width * region.height > 1000) { // Min size threshold
+          // Increased minimum size threshold to reduce noise
+          if (region.width * region.height > 2000) {
             regions.push(region);
           }
         }
       }
     }
 
-    return regions;
+    // Only keep top 3 largest regions
+    return regions
+      .sort((a, b) => (b.width * b.height) - (a.width * a.height))
+      .slice(0, 3);
   }
 
   isColorMatch(r, g, b, targetColor, tolerance) {
@@ -128,16 +136,27 @@ export class DialogueDetector {
     let minX = startX, maxX = startX;
     let minY = startY, maxY = startY;
     
-    const stack = [[startX, startY]];
+    // Use a more efficient queue implementation
+    const queue = new Uint32Array(width * height);
+    let queueStart = 0;
+    let queueEnd = 0;
     
-    while (stack.length > 0) {
-      const [x, y] = stack.pop();
-      const key = `${x},${y}`;
+    // Encode coordinates into single number
+    queue[queueEnd++] = (startX << 16) | startY;
+    
+    // Use a more efficient visited check with Uint8Array
+    const visitedArr = new Uint8Array(width * height);
+    
+    while (queueStart < queueEnd) {
+      const packed = queue[queueStart++];
+      const x = packed >> 16;
+      const y = packed & 0xFFFF;
       
-      if (visited.has(key)) continue;
-      visited.add(key);
+      const visitedIndex = y * width + x;
+      if (visitedArr[visitedIndex]) continue;
+      visitedArr[visitedIndex] = 1;
       
-      const index = (y * width + x) * 4;
+      const index = visitedIndex * 4;
       const r = data[index];
       const g = data[index + 1];
       const b = data[index + 2];
@@ -149,11 +168,11 @@ export class DialogueDetector {
       minY = Math.min(minY, y);
       maxY = Math.max(maxY, y);
       
-      // Add neighbors
-      if (x > 0) stack.push([x - 1, y]);
-      if (x < width - 1) stack.push([x + 1, y]);
-      if (y > 0) stack.push([x, y - 1]);
-      if (y < height - 1) stack.push([x, y + 1]);
+      // Check neighbors with bounds checking
+      if (x > 0) queue[queueEnd++] = ((x - 1) << 16) | y;
+      if (x < width - 1) queue[queueEnd++] = ((x + 1) << 16) | y;
+      if (y > 0) queue[queueEnd++] = (x << 16) | (y - 1);
+      if (y < height - 1) queue[queueEnd++] = (x << 16) | (y + 1);
     }
     
     const region = {
@@ -163,29 +182,28 @@ export class DialogueDetector {
       height: maxY - minY + 1
     };
     
-    // Create a new ImageData for the cropped region
-    const croppedData = new ImageData(region.width, region.height);
-    
-    // Copy pixel data from original to cropped
-    for (let y = 0; y < region.height; y++) {
-      for (let x = 0; x < region.width; x++) {
-        const sourceIndex = ((y + region.y) * width + (x + region.x)) * 4;
-        const targetIndex = (y * region.width + x) * 4;
-        
-        croppedData.data[targetIndex] = data[sourceIndex];
-        croppedData.data[targetIndex + 1] = data[sourceIndex + 1];
-        croppedData.data[targetIndex + 2] = data[sourceIndex + 2];
-        croppedData.data[targetIndex + 3] = data[sourceIndex + 3];
-      }
-    }
-    
-    // Create preview image
+    // Create preview more efficiently
     const canvas = document.createElement('canvas');
     canvas.width = region.width;
     canvas.height = region.height;
-    const ctx = canvas.getContext('2d');
-    ctx.putImageData(croppedData, 0, 0);
-    region.preview = canvas.toDataURL();
+    const ctx = canvas.getContext('2d', { alpha: false });
+    
+    // Draw directly from source imageData
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = width;
+    tempCanvas.height = height;
+    const tempCtx = tempCanvas.getContext('2d', { alpha: false });
+    const tempImageData = tempCtx.createImageData(width, height);
+    tempImageData.data.set(data);
+    tempCtx.putImageData(tempImageData, 0, 0);
+    
+    ctx.drawImage(
+      tempCanvas,
+      region.x, region.y, region.width, region.height,
+      0, 0, region.width, region.height
+    );
+    
+    region.preview = canvas.toDataURL('image/jpeg', 0.8);
     
     return region;
   }

@@ -19,6 +19,7 @@ class GameDialogueTTS {
     this.isPickingColor = false;
     this.setupNPCList();
     this.lastSpeakTime = 0;
+    this.ocrTimeout = null;
   }
 
   populateVoiceSelects() {
@@ -233,7 +234,6 @@ class GameDialogueTTS {
   async processFrame() {
     if (this.isProcessing) return;
     
-    // Check if we need to wait based on TTS delay
     const ttsDelay = parseInt(document.getElementById('ttsDelay').value);
     const timeSinceLastSpeak = Date.now() - this.lastSpeakTime;
     if (timeSinceLastSpeak < ttsDelay) {
@@ -245,59 +245,69 @@ class GameDialogueTTS {
     const debugCanvas = document.getElementById('debugCanvas');
     
     try {
-      const regions = this.dialogueDetector.detectDialogueRegions(video, debugCanvas);
-      
-      if (regions.length > 0) {
-        const dialoguePreview = document.getElementById('dialoguePreview');
-        const ocrText = document.getElementById('ocrText');
+      // Use requestAnimationFrame for smoother rendering
+      requestAnimationFrame(() => {
+        const regions = this.dialogueDetector.detectDialogueRegions(video, debugCanvas);
         
-        // Only process the largest region to avoid duplicate processing
-        const largestRegion = regions.reduce((max, region) => 
-          (region.width * region.height > max.width * max.height) ? region : max
-        );
-        
-        const { name, text } = await this.ocrProcessor.processRegion(video, largestRegion);
-        
-        if (text && (text !== this.lastDialogue.text || name !== this.lastDialogue.name)) {
-          this.lastDialogue = { name, text };
-          dialoguePreview.style.backgroundImage = `url(${largestRegion.preview})`;
+        if (regions.length > 0) {
+          const dialoguePreview = document.getElementById('dialoguePreview');
+          const ocrText = document.getElementById('ocrText');
           
-          ocrText.textContent = name ? `${name}: ${text}` : text;
+          // Process only the largest region
+          const largestRegion = regions[0]; // Already sorted by size
           
-          if (name) {
-            this.addNPCToList(name);
+          // Debounce OCR processing
+          if (this.ocrTimeout) {
+            clearTimeout(this.ocrTimeout);
           }
+          
+          this.ocrTimeout = setTimeout(async () => {
+            const { name, text } = await this.ocrProcessor.processRegion(video, largestRegion);
+            
+            if (text && (text !== this.lastDialogue.text || name !== this.lastDialogue.name)) {
+              this.lastDialogue = { name, text };
+              dialoguePreview.style.backgroundImage = `url(${largestRegion.preview})`;
+              ocrText.textContent = name ? `${name}: ${text}` : text;
+              
+              if (name) {
+                this.addNPCToList(name);
+              }
 
-          let selectedVoice;
-          if (name) {
-            const voiceSelect = document.querySelector(`[data-npc="${name}"] .voice-select`);
-            if (voiceSelect && voiceSelect.value) {
-              selectedVoice = speechSynthesis.getVoices()
-                .find(voice => voice.name === voiceSelect.value);
+              let selectedVoice;
+              if (name) {
+                const voiceSelect = document.querySelector(`[data-npc="${name}"] .voice-select`);
+                if (voiceSelect?.value) {
+                  selectedVoice = speechSynthesis.getVoices()
+                    .find(voice => voice.name === voiceSelect.value);
+                }
+              }
+              
+              if (!selectedVoice && largestRegion.boxIndex !== undefined) {
+                const boxVoice = document.getElementById(`voice${largestRegion.boxIndex + 1}`).value;
+                if (boxVoice) {
+                  selectedVoice = speechSynthesis.getVoices()
+                    .find(voice => voice.name === boxVoice);
+                }
+              }
+
+              if (selectedVoice) {
+                this.ttsEngine.setVoice(selectedVoice);
+              }
+
+              await this.ttsEngine.speak(text);
+              this.lastSpeakTime = Date.now();
             }
-          }
-          
-          if (!selectedVoice && largestRegion.boxIndex !== undefined) {
-            const boxVoice = document.getElementById(`voice${largestRegion.boxIndex + 1}`).value;
-            if (boxVoice) {
-              selectedVoice = speechSynthesis.getVoices()
-                .find(voice => voice.name === boxVoice);
-            }
-          }
-
-          if (selectedVoice) {
-            this.ttsEngine.setVoice(selectedVoice);
-          }
-
-          await this.ttsEngine.speak(text);
-          this.lastSpeakTime = Date.now();
+            
+            this.isProcessing = false;
+          }, 100); // Small delay to debounce OCR processing
+        } else {
+          this.isProcessing = false;
         }
-      }
+      });
     } catch (error) {
       console.error('Error processing frame:', error);
+      this.isProcessing = false;
     }
-
-    this.isProcessing = false;
   }
 }
 
