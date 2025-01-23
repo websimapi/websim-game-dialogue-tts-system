@@ -2,24 +2,43 @@ export class DialogueDetector {
   constructor() {
     this.colors = Array(3).fill('#ffffff');
     this.tolerances = Array(3).fill(10);
-    this.cache = new Map();
-    this.cacheTimeout = 1000; // 1 second cache timeout
+    this.enabled = Array(3).fill(true);
+    this.loadSettings();
+  }
+
+  loadSettings() {
+    for (let i = 0; i < 3; i++) {
+      const savedColor = localStorage.getItem(`dialogueColor${i}`);
+      const savedTolerance = localStorage.getItem(`dialogueTolerance${i}`);
+      const savedEnabled = localStorage.getItem(`dialogueEnabled${i}`);
+      
+      if (savedColor) this.colors[i] = savedColor;
+      if (savedTolerance) this.tolerances[i] = parseInt(savedTolerance);
+      if (savedEnabled) this.enabled[i] = savedEnabled === 'true';
+    }
+  }
+
+  saveSettings() {
+    for (let i = 0; i < 3; i++) {
+      localStorage.setItem(`dialogueColor${i}`, this.colors[i]);
+      localStorage.setItem(`dialogueTolerance${i}`, this.tolerances[i]);
+      localStorage.setItem(`dialogueEnabled${i}`, this.enabled[i]);
+    }
   }
 
   setColor(index, color) {
     this.colors[index] = color;
-    this.cache.clear();
+    this.saveSettings();
   }
 
   setTolerance(index, tolerance) {
     this.tolerances[index] = tolerance;
-    this.cache.clear();
+    this.saveSettings();
   }
 
-  getCacheKey(imageData) {
-    // Create a cache key from the first and last few pixels
-    const samples = new Uint32Array(imageData.data.buffer, 0, 100);
-    return samples.join(',');
+  setEnabled(index, enabled) {
+    this.enabled[index] = enabled;
+    this.saveSettings();
   }
 
   detectDialogueRegions(video, debugCanvas) {
@@ -28,20 +47,11 @@ export class DialogueDetector {
     const ctx = debugCanvas.getContext('2d');
     ctx.drawImage(video, 0, 0);
     
-    const imageData = ctx.getImageData(0, 0, debugCanvas.width, debugCanvas.height);
-    const cacheKey = this.getCacheKey(imageData);
-    
-    // Check cache
-    const cachedResult = this.cache.get(cacheKey);
-    if (cachedResult && (Date.now() - cachedResult.timestamp) < this.cacheTimeout) {
-      this.drawDebugRects(ctx, cachedResult.regions);
-      return cachedResult.regions;
-    }
-    
     const regions = [];
+    const imageData = ctx.getImageData(0, 0, debugCanvas.width, debugCanvas.height);
     
     for (let i = 0; i < this.colors.length; i++) {
-      if (this.colors[i] === '#ffffff') continue;
+      if (!this.enabled[i] || this.colors[i] === '#ffffff') continue;
       
       const colorRegions = this.findColorRegions(
         imageData, 
@@ -49,25 +59,17 @@ export class DialogueDetector {
         this.tolerances[i]
       );
       
-      regions.push(...colorRegions);
+      regions.push(...colorRegions.map(region => ({...region, boxIndex: i})));
     }
 
-    // Cache the result
-    this.cache.set(cacheKey, {
-      regions: regions,
-      timestamp: Date.now()
-    });
-
-    this.drawDebugRects(ctx, regions);
-    return regions;
-  }
-
-  drawDebugRects(ctx, regions) {
+    // Draw debug rectangles
     ctx.strokeStyle = 'red';
     ctx.lineWidth = 2;
     regions.forEach(region => {
       ctx.strokeRect(region.x, region.y, region.width, region.height);
     });
+
+    return regions;
   }
 
   hexToRgb(hex) {
@@ -158,20 +160,28 @@ export class DialogueDetector {
       height: maxY - minY + 1
     };
     
+    // Create a new ImageData for the cropped region
+    const croppedData = new ImageData(region.width, region.height);
+    
+    // Copy pixel data from original to cropped
+    for (let y = 0; y < region.height; y++) {
+      for (let x = 0; x < region.width; x++) {
+        const sourceIndex = ((y + region.y) * width + (x + region.x)) * 4;
+        const targetIndex = (y * region.width + x) * 4;
+        
+        croppedData.data[targetIndex] = data[sourceIndex];
+        croppedData.data[targetIndex + 1] = data[sourceIndex + 1];
+        croppedData.data[targetIndex + 2] = data[sourceIndex + 2];
+        croppedData.data[targetIndex + 3] = data[sourceIndex + 3];
+      }
+    }
+    
     // Create preview image
     const canvas = document.createElement('canvas');
     canvas.width = region.width;
     canvas.height = region.height;
     const ctx = canvas.getContext('2d');
-    ctx.putImageData(
-      imageData, 
-      -region.x, 
-      -region.y, 
-      region.x, 
-      region.y, 
-      region.width, 
-      region.height
-    );
+    ctx.putImageData(croppedData, 0, 0);
     region.preview = canvas.toDataURL();
     
     return region;

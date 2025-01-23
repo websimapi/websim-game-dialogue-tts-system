@@ -44,6 +44,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  position: relative;
   padding: 10px;
   border: 1px solid #ddd;
   border-radius: 4px;
@@ -55,7 +56,7 @@
   gap: 10px;
 }
 
-.color-picker-settings {
+.color-picker-controls {
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -65,6 +66,10 @@
   display: flex;
   align-items: center;
   gap: 5px;
+}
+
+.enable-toggle {
+  margin-left: auto;
 }
 
 input[type="range"] {
@@ -83,6 +88,10 @@ input[type="range"] {
   padding: 10px;
   background: white;
   border-radius: 4px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  min-height: 150px;
 }
 
 #ocrText {
@@ -149,24 +158,8 @@ button:hover {
   gap: 5px;
 }
 
-.npc-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
 .npc-item span {
   font-weight: bold;
-}
-
-.delete-npc {
-  background: #dc3545;
-  padding: 3px 8px;
-  font-size: 12px;
-}
-
-.delete-npc:hover {
-  background: #c82333;
 }
 
 .voice-select {
@@ -178,11 +171,88 @@ button:hover {
 
 .voice-settings {
   margin-top: 10px;
+}
+
+.voice-settings select {
+  width: 100%;
+  padding: 5px;
+  margin-top: 5px;
+}
+
+.manual-regions {
+  margin: 20px 0;
+  padding: 20px 0;
+  border-top: 1px solid #ddd;
+}
+
+.manual-region-item {
+  margin: 10px 0;
   padding: 10px;
-  background: #f8f9fa;
+  background: white;
   border-radius: 4px;
 }
 
-.enabled-toggle {
-  margin-bottom: 10px;
+.manual-region-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.region-threshold {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.region-preview {
+  margin-top: 10px;
+  width: 100%;
+  height: 100px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  border: 1px solid #ddd;
+}
+
+.region-select-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  cursor: crosshair;
+  z-index: 1000;
+}
+
+.region-select-overlay.active {
+  display: block;
+}
+
+.selection-box {
+  position: absolute;
+  border: 2px solid #00ff00;
+  background: rgba(0, 255, 0, 0.2);
+}
+
+.region-debug {
+  margin-top: 5px;
+  padding: 5px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.remove-region {
+  background: #dc3545;
+  padding: 5px 10px;
+  font-size: 12px;
+  margin-top: 5px;
+}
+
+.remove-region:hover {
+  background: #c82333;
 }
