@@ -1,26 +1,56 @@
-importScripts('https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js');
+importScripts('https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js');
 
 let worker = null;
 let initialized = false;
+let initializationPromise = null;
+
+async function initializeWorker() {
+  if (initialized) return;
+  if (initializationPromise) return initializationPromise;
+
+  initializationPromise = (async () => {
+    try {
+      worker = await Tesseract.createWorker();
+      await worker.load();
+      await worker.loadLanguage('eng');
+      await worker.initialize('eng');
+      initialized = true;
+    } catch (error) {
+      console.error('Failed to initialize Tesseract worker:', error);
+      // Retry initialization after a delay
+      setTimeout(() => {
+        initializationPromise = null;
+        initialized = false;
+      }, 5000);
+      throw error;
+    }
+  })();
+
+  return initializationPromise;
+}
 
 self.onmessage = async function(e) {
   const { type, data } = e.data;
 
-  if (!initialized) {
-    worker = await Tesseract.createWorker();
-    await worker.load();
-    await worker.loadLanguage('eng');
-    await worker.initialize('eng');
-    initialized = true;
-  }
+  try {
+    await initializeWorker();
 
-  switch (type) {
-    case 'processRegion': {
-      const { imageData, region } = data;
-      const result = await processRegion(imageData, region);
-      self.postMessage({ type: 'ocrResult', result });
-      break;
+    switch (type) {
+      case 'processRegion': {
+        const { imageData, region } = data;
+        const result = await processRegion(imageData, region);
+        self.postMessage({ type: 'ocrResult', result });
+        break;
+      }
     }
+  } catch (error) {
+    self.postMessage({ 
+      type: 'error', 
+      error: {
+        message: error.message,
+        stack: error.stack
+      }
+    });
   }
 };
 

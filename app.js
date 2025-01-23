@@ -148,17 +148,36 @@ class GameDialogueTTS {
 
   setupWorkerHandlers() {
     this.imageAnalysisWorker.onmessage = (e) => {
-      const { type, result } = e.data;
+      const { type, result, error } = e.data;
+      if (error) {
+        console.error('Worker error:', error);
+        return;
+      }
+      
       if (type === 'imageChangeResult') {
         this.handleImageChangeResult(result);
       }
     };
 
     this.dialogueWorker.onmessage = (e) => {
-      const { type, result } = e.data;
+      const { type, result, error } = e.data;
+      if (error) {
+        console.error('Dialogue worker error:', error);
+        return;
+      }
+      
       if (type === 'ocrResult') {
         this.handleOCRResult(result);
       }
+    };
+
+    // Add error handlers for workers
+    this.imageAnalysisWorker.onerror = (error) => {
+      console.error('Image analysis worker error:', error);
+    };
+
+    this.dialogueWorker.onerror = (error) => {
+      console.error('Dialogue worker error:', error);
     };
   }
 
