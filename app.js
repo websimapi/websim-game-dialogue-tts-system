@@ -18,11 +18,15 @@ class GameDialogueTTS {
     this.setupEventListeners();
     this.populateVoiceSelects();
     this.loadSavedSettings();
+    this.imageAnalysisWorker = new Worker('imageAnalysisWorker.js');
+    this.dialogueWorker = new Worker('dialogueWorker.js');
+    
+    this.setupWorkerHandlers();
+    
+    this.processingQueue = [];
     this.isProcessing = false;
-    this.lastDialogue = { name: null, text: '' };
-    this.scanInterval = null;
-    this.isPickingColor = false;
-    this.setupNPCList();
+    
+    this.processFrameLoop();
   }
 
   populateVoiceSelects() {
@@ -142,87 +146,86 @@ class GameDialogueTTS {
     });
   }
 
-  setupNPCList() {
-    const npcNames = this.ocrProcessor.loadNPCNames();
-    const npcList = document.getElementById('npcList');
-    npcNames.forEach(name => {
-      this.addNPCToList(name);
-    });
-  }
-
-  addNPCToList(name) {
-    const npcList = document.getElementById('npcList');
-    if (!document.querySelector(`[data-npc="${name}"]`)) {
-      const div = document.createElement('div');
-      div.classList.add('npc-item');
-      div.dataset.npc = name;
-      div.innerHTML = `
-        <span>${name}</span>
-        <select class="voice-select">
-          <option value="">Default Voice</option>
-          ${speechSynthesis.getVoices().map(voice => 
-            `<option value="${voice.name}">${voice.name} (${voice.lang})</option>`
-          ).join('')}
-        </select>
-      `;
-      npcList.appendChild(div);
-
-      // Load saved voice preference
-      const savedVoice = localStorage.getItem(`npc-voice-${name}`);
-      if (savedVoice) {
-        div.querySelector('.voice-select').value = savedVoice;
+  setupWorkerHandlers() {
+    this.imageAnalysisWorker.onmessage = (e) => {
+      const { type, result } = e.data;
+      if (type === 'imageChangeResult') {
+        this.handleImageChangeResult(result);
       }
+    };
 
-      // Save voice preference on change
-      div.querySelector('.voice-select').addEventListener('change', (e) => {
-        localStorage.setItem(`npc-voice-${name}`, e.target.value);
-      });
+    this.dialogueWorker.onmessage = (e) => {
+      const { type, result } = e.data;
+      if (type === 'ocrResult') {
+        this.handleOCRResult(result);
+      }
+    };
+  }
+
+  processFrameLoop() {
+    if (!this.isProcessing && this.processingQueue.length > 0) {
+      const task = this.processingQueue.shift();
+      this.executeTask(task);
+    }
+    
+    requestAnimationFrame(() => this.processFrameLoop());
+  }
+
+  async executeTask(task) {
+    this.isProcessing = true;
+    
+    try {
+      switch (task.type) {
+        case 'processFrame':
+          await this.doProcessFrame();
+          break;
+        case 'processManualRegion':
+          await this.doProcessManualRegion(task.region);
+          break;
+      }
+    } catch (error) {
+      console.error('Task execution error:', error);
+    }
+    
+    this.isProcessing = false;
+  }
+
+  async processFrame() {
+    if (this.processingQueue.length < 3) { // Limit queue size
+      this.processingQueue.push({ type: 'processFrame' });
     }
   }
 
-  startColorPick(pickerIndex) {
-    this.isPickingColor = true;
-    this.currentPickerIndex = pickerIndex;
-    document.querySelector('.color-pick-overlay').classList.add('active');
-  }
-
-  pickColor(event) {
+  async doProcessFrame() {
     const video = document.getElementById('gameVideo');
-    const rect = video.getBoundingClientRect();
+    const debugCanvas = document.getElementById('debugCanvas');
     
-    // Check if click is within video bounds
-    if (event.clientX >= rect.left && event.clientX <= rect.right &&
-        event.clientY >= rect.top && event.clientY <= rect.bottom) {
-      
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
-      
-      // Create temporary canvas to sample color
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0);
-      
-      // Get color at click position
-      const scaleX = video.videoWidth / video.offsetWidth;
-      const scaleY = video.videoHeight / video.offsetHeight;
-      const pixel = ctx.getImageData(x * scaleX, y * scaleY, 1, 1).data;
-      
-      // Convert to hex
-      const color = '#' + [pixel[0], pixel[1], pixel[2]]
-        .map(x => x.toString(16).padStart(2, '0'))
-        .join('');
-      
-      // Update color picker and detector
-      const colorInput = document.getElementById(`color${this.currentPickerIndex + 1}`);
-      colorInput.value = color;
-      this.dialogueDetector.setColor(this.currentPickerIndex, color);
-    }
+    // Use OffscreenCanvas for better performance
+    const offscreen = new OffscreenCanvas(video.videoWidth, video.videoHeight);
+    const ctx = offscreen.getContext('2d');
+    ctx.drawImage(video, 0, 0);
     
-    // Reset picking state
-    this.isPickingColor = false;
-    document.querySelector('.color-pick-overlay').classList.remove('active');
+    // Process regions in parallel
+    const regions = this.dialogueDetector.detectDialogueRegions(video, debugCanvas);
+    
+    await Promise.all(regions.map(region => 
+      this.processRegion(offscreen, region)
+    ));
+  }
+
+  async processRegion(canvas, region) {
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(
+      region.x,
+      region.y,
+      region.width,
+      region.height
+    );
+    
+    this.dialogueWorker.postMessage({
+      type: 'processRegion',
+      data: { imageData, region }
+    });
   }
 
   async startCapture() {
@@ -243,6 +246,14 @@ class GameDialogueTTS {
       clearInterval(this.scanInterval);
       this.scanInterval = setInterval(() => this.processFrame(), newInterval);
     }
+  }
+
+  handleImageChangeResult(result) {
+    // Handle image change result from worker
+  }
+
+  handleOCRResult(result) {
+    // Handle OCR result from worker
   }
 
   startRegionSelection() {
@@ -366,145 +377,138 @@ class GameDialogueTTS {
     list.appendChild(div);
   }
 
-  async processFrame() {
-    if (this.isProcessing) return;
-    this.isProcessing = true;
+  startColorPick(pickerIndex) {
+    this.isPickingColor = true;
+    this.currentPickerIndex = pickerIndex;
+    document.querySelector('.color-pick-overlay').classList.add('active');
+  }
 
+  pickColor(event) {
     const video = document.getElementById('gameVideo');
-    const debugCanvas = document.getElementById('debugCanvas');
+    const rect = video.getBoundingClientRect();
     
-    try {
-      // Process manual regions first
-      for (const region of this.manualRegions) {
-        const canvas = document.createElement('canvas');
-        canvas.width = region.width;
-        canvas.height = region.height;
-        const ctx = canvas.getContext('2d');
-        
-        ctx.drawImage(
-          video,
-          region.x,
-          region.y,
-          region.width,
-          region.height,
-          0,
-          0,
-          region.width,
-          region.height
-        );
-        
-        const imageData = canvas.toDataURL();
-        
-        if (!region.lastImage || this.detectImageChange(region.lastImage, imageData, region.threshold)) {
-          region.lastImage = imageData;
-          
-          const { text } = await this.ocrProcessor.processRegion(video, region);
-          if (text !== region.lastText) {
-            region.lastText = text;
-            
-            const regionElement = document.querySelector(`[data-region-id="${region.id}"]`);
-            if (regionElement) {
-              regionElement.querySelector('.region-preview').style.backgroundImage = `url(${imageData})`;
-              regionElement.querySelector('.region-debug').textContent = text;
-            }
-          }
-        }
-      }
-
-      // Process regular dialogue regions
-      const regions = this.dialogueDetector.detectDialogueRegions(video, debugCanvas);
+    // Check if click is within video bounds
+    if (event.clientX >= rect.left && event.clientX <= rect.right &&
+        event.clientY >= rect.top && event.clientY <= rect.bottom) {
       
-      if (regions.length > 0) {
-        const dialoguePreview = document.getElementById('dialoguePreview');
-        const ocrText = document.getElementById('ocrText');
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      
+      // Create temporary canvas to sample color
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0);
+      
+      // Get color at click position
+      const scaleX = video.videoWidth / video.offsetWidth;
+      const scaleY = video.videoHeight / video.offsetHeight;
+      const pixel = ctx.getImageData(x * scaleX, y * scaleY, 1, 1).data;
+      
+      // Convert to hex
+      const color = '#' + [pixel[0], pixel[1], pixel[2]]
+        .map(x => x.toString(16).padStart(2, '0'))
+        .join('');
+      
+      // Update color picker and detector
+      const colorInput = document.getElementById(`color${this.currentPickerIndex + 1}`);
+      colorInput.value = color;
+      this.dialogueDetector.setColor(this.currentPickerIndex, color);
+    }
+    
+    // Reset picking state
+    this.isPickingColor = false;
+    document.querySelector('.color-pick-overlay').classList.remove('active');
+  }
+
+  setupNPCList() {
+    const npcNames = this.ocrProcessor.loadNPCNames();
+    const npcList = document.getElementById('npcList');
+    npcNames.forEach(name => {
+      this.addNPCToList(name);
+    });
+  }
+
+  addNPCToList(name) {
+    const npcList = document.getElementById('npcList');
+    if (!document.querySelector(`[data-npc="${name}"]`)) {
+      const div = document.createElement('div');
+      div.classList.add('npc-item');
+      div.dataset.npc = name;
+      div.innerHTML = `
+        <span>${name}</span>
+        <select class="voice-select">
+          <option value="">Default Voice</option>
+          ${speechSynthesis.getVoices().map(voice => 
+            `<option value="${voice.name}">${voice.name} (${voice.lang})</option>`
+          ).join('')}
+        </select>
+      `;
+      npcList.appendChild(div);
+
+      // Load saved voice preference
+      const savedVoice = localStorage.getItem(`npc-voice-${name}`);
+      if (savedVoice) {
+        div.querySelector('.voice-select').value = savedVoice;
+      }
+
+      // Save voice preference on change
+      div.querySelector('.voice-select').addEventListener('change', (e) => {
+        localStorage.setItem(`npc-voice-${name}`, e.target.value);
+      });
+    }
+  }
+
+  async doProcessManualRegion(region) {
+    const canvas = document.createElement('canvas');
+    canvas.width = region.width;
+    canvas.height = region.height;
+    const ctx = canvas.getContext('2d');
+    
+    const video = document.getElementById('gameVideo');
+    ctx.drawImage(
+      video,
+      region.x,
+      region.y,
+      region.width,
+      region.height,
+      0,
+      0,
+      region.width,
+      region.height
+    );
+    
+    const imageData = canvas.toDataURL();
+    
+    if (!region.lastImage || await this.detectImageChange(region.lastImage, imageData, region.threshold)) {
+      region.lastImage = imageData;
+      
+      const { text } = await this.ocrProcessor.processRegion(video, region);
+      if (text !== region.lastText) {
+        region.lastText = text;
         
-        for (const region of regions) {
-          const { name, text } = await this.ocrProcessor.processRegion(video, region);
-          
-          if (text && (text !== this.lastDialogue.text || name !== this.lastDialogue.name)) {
-            this.lastDialogue = { name, text };
-            dialoguePreview.style.backgroundImage = `url(${region.preview})`;
-            
-            ocrText.textContent = name ? `${name}: ${text}` : text;
-            
-            if (name) {
-              this.addNPCToList(name);
-            }
-
-            // Get voice preference for this NPC or dialogue box
-            let selectedVoice;
-            if (name) {
-              const voiceSelect = document.querySelector(`[data-npc="${name}"] .voice-select`);
-              if (voiceSelect && voiceSelect.value) {
-                selectedVoice = speechSynthesis.getVoices()
-                  .find(voice => voice.name === voiceSelect.value);
-              }
-            }
-            
-            // If no NPC voice, use dialogue box default voice
-            if (!selectedVoice && region.boxIndex !== undefined) {
-              const boxVoice = document.getElementById(`voice${region.boxIndex + 1}`).value;
-              if (boxVoice) {
-                selectedVoice = speechSynthesis.getVoices()
-                  .find(voice => voice.name === boxVoice);
-              }
-            }
-
-            if (selectedVoice) {
-              this.ttsEngine.setVoice(selectedVoice);
-            }
-
-            await this.ttsEngine.speak(text);
-          }
+        const regionElement = document.querySelector(`[data-region-id="${region.id}"]`);
+        if (regionElement) {
+          regionElement.querySelector('.region-preview').style.backgroundImage = `url(${imageData})`;
+          regionElement.querySelector('.region-debug').textContent = text;
         }
       }
-    } catch (error) {
-      console.error('Error processing frame:', error);
     }
-
-    this.isProcessing = false;
   }
 
   detectImageChange(oldImage, newImage, threshold) {
-    if (!oldImage) return true;
-    
-    const canvas1 = document.createElement('canvas');
-    const canvas2 = document.createElement('canvas');
-    const img1 = new Image();
-    const img2 = new Image();
-    
     return new Promise((resolve) => {
-      img1.onload = () => {
-        img2.onload = () => {
-          canvas1.width = img1.width;
-          canvas1.height = img1.height;
-          canvas2.width = img2.width;
-          canvas2.height = img2.height;
-          
-          const ctx1 = canvas1.getContext('2d');
-          const ctx2 = canvas2.getContext('2d');
-          
-          ctx1.drawImage(img1, 0, 0);
-          ctx2.drawImage(img2, 0, 0);
-          
-          const data1 = ctx1.getImageData(0, 0, canvas1.width, canvas1.height).data;
-          const data2 = ctx2.getImageData(0, 0, canvas2.width, canvas2.height).data;
-          
-          let diffCount = 0;
-          for (let i = 0; i < data1.length; i += 4) {
-            if (Math.abs(data1[i] - data2[i]) > 10 ||
-                Math.abs(data1[i + 1] - data2[i + 1]) > 10 ||
-                Math.abs(data1[i + 2] - data2[i + 2]) > 10) {
-              diffCount++;
-            }
-          }
-          
-          const diffPercentage = diffCount / (data1.length / 4);
-          resolve(diffPercentage > threshold);
-        };
-        img2.src = newImage;
+      this.imageAnalysisWorker.postMessage({
+        type: 'detectImageChange',
+        data: { oldImage, newImage, threshold }
+      });
+      this.imageAnalysisWorker.onmessage = (e) => {
+        const { type, result } = e.data;
+        if (type === 'imageChangeResult') {
+          resolve(result);
+        }
       };
-      img1.src = oldImage;
     });
   }
 }
