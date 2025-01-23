@@ -509,4 +509,6 @@ class GameDialogueTTS {
   }
 }
 
-const app = new GameDialogueTTS();
+document.addEventListener('DOMContentLoaded', () => {
+  const app = new GameDialogueTTS();
+});
